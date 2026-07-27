@@ -1,0 +1,2322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ATLAS · Tactical Map Workstation</title>
+
+<!-- ============ EXTERNAL LIBS (Leaflet ecosystem) ============ -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ================================================================
+   ATLAS — Tactical Map Workstation
+   Single-file operational mapping tool. Dark ops theme.
+   ================================================================ */
+
+:root{
+  --accent:#2dd4bf;
+  --accent-dim:#1f9e8f;
+  --accent-glow:rgba(45,212,191,.35);
+  --bg:#05080c;
+  --bg-1:#080d13;
+  --bg-2:#0b131c;
+  --bg-3:#0f1a26;
+  --panel:rgba(10,16,23,.92);
+  --panel-solid:#0a1017;
+  --border:#182634;
+  --border-2:#22384c;
+  --text:#cdd9e8;
+  --text-2:#8ba0b6;
+  --muted:#5f7488;
+  --danger:#ff5470;
+  --warn:#f5a524;
+  --ok:#3ddc84;
+  --info:#38bdf8;
+  --shadow:0 12px 40px rgba(0,0,0,.55);
+  --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --rail:52px;
+  --leftw:340px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  font-family:var(--sans);
+  background:var(--bg);
+  color:var(--text);
+  overflow:hidden;
+  font-size:13px;
+  -webkit-font-smoothing:antialiased;
+}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1c2c3c;border-radius:6px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#2a4056}
+input,select,textarea,button{font-family:inherit;font-size:12px;color:var(--text)}
+button{cursor:pointer}
+a{color:var(--accent)}
+.mono{font-family:var(--mono)}
+.hide{display:none !important}
+
+/* ---------- App shell ---------- */
+#app{display:flex;flex-direction:column;height:100%;position:relative}
+
+/* ---------- Top bar ---------- */
+#topbar{
+  height:46px;display:flex;align-items:center;gap:14px;padding:0 12px;
+  background:linear-gradient(180deg,#0a121b,#070c12);
+  border-bottom:1px solid var(--border);
+  z-index:1200;position:relative;
+}
+#topbar .brand{display:flex;align-items:center;gap:9px;padding-right:12px}
+#topbar .logo{
+  width:26px;height:26px;border:1px solid var(--accent);border-radius:5px;
+  display:grid;place-items:center;color:var(--accent);
+  box-shadow:0 0 12px var(--accent-glow);position:relative;overflow:hidden;
+  background:radial-gradient(circle at 50% 120%,var(--accent-glow),transparent 70%);
+}
+#topbar .logo svg{width:16px;height:16px}
+#topbar .title{font-weight:700;letter-spacing:.16em;font-size:14px}
+#topbar .title small{display:block;font-weight:500;font-size:9px;letter-spacing:.28em;color:var(--muted);margin-top:1px}
+
+.topsearch{flex:1;max-width:520px;position:relative}
+.topsearch input{
+  width:100%;height:30px;border-radius:6px;border:1px solid var(--border);
+  background:#070d14;padding:0 34px 0 32px;color:var(--text);outline:none;
+}
+.topsearch input:focus{border-color:var(--accent-dim);box-shadow:0 0 0 2px var(--accent-glow)}
+.topsearch .ic{position:absolute;left:9px;top:7px;color:var(--muted)}
+.topsearch .kbd{position:absolute;right:8px;top:6px;font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-family:var(--mono)}
+.search-results{
+  position:absolute;top:34px;left:0;right:0;background:var(--panel-solid);
+  border:1px solid var(--border-2);border-radius:8px;box-shadow:var(--shadow);
+  max-height:340px;overflow:auto;z-index:1300;display:none
+}
+.search-results.open{display:block}
+.sr-item{padding:8px 11px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;gap:9px;align-items:flex-start}
+.sr-item:last-child{border-bottom:none}
+.sr-item:hover,.sr-item.active{background:#0e1a26}
+.sr-item .sr-ic{color:var(--accent);margin-top:1px}
+.sr-item .sr-t{font-size:12px;color:var(--text)}
+.sr-item .sr-s{font-size:10.5px;color:var(--muted);margin-top:2px}
+
+.top-status{display:flex;align-items:center;gap:14px;margin-left:auto}
+.stat-chip{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-2);font-family:var(--mono)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);position:relative}
+.dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.dot.off{background:var(--danger)}
+.dot.warn{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+.dot.pulse::after{content:'';position:absolute;inset:-3px;border-radius:50%;border:1px solid currentColor;animation:pulse 1.6s ease-out infinite;color:inherit}
+@keyframes pulse{0%{transform:scale(.6);opacity:.8}100%{transform:scale(1.9);opacity:0}}
+.tbtn{
+  height:30px;min-width:30px;padding:0 9px;border-radius:6px;border:1px solid var(--border);
+  background:#0a121a;color:var(--text-2);display:inline-flex;align-items:center;gap:6px;justify-content:center;
+}
+.tbtn:hover{border-color:var(--accent-dim);color:var(--text)}
+.tbtn.active{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px var(--accent-glow)}
+
+/* ---------- Body layout ---------- */
+#body{flex:1;display:flex;min-height:0;position:relative}
+
+/* Icon rail */
+#rail{
+  width:var(--rail);flex:0 0 var(--rail);background:#070c12;border-right:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:4px;z-index:1100;
+}
+.rail-btn{
+  width:38px;height:38px;border-radius:8px;border:1px solid transparent;background:transparent;
+  color:var(--muted);display:grid;place-items:center;position:relative;
+}
+.rail-btn:hover{background:#0e1824;color:var(--text)}
+.rail-btn.active{background:#0e1e2a;color:var(--accent);border-color:var(--border-2)}
+.rail-btn.active::before{content:'';position:absolute;left:-8px;top:8px;bottom:8px;width:2px;background:var(--accent);border-radius:2px;box-shadow:0 0 8px var(--accent)}
+.rail-btn svg{width:19px;height:19px}
+.rail-sep{width:24px;height:1px;background:var(--border);margin:4px 0}
+.rail-btn .badge{position:absolute;top:2px;right:2px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--accent);color:#04110d;font-size:9px;font-weight:700;display:grid;place-items:center;font-family:var(--mono)}
+
+/* Left panel */
+#panel{
+  width:var(--leftw);flex:0 0 var(--leftw);background:var(--bg-1);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;min-height:0;transition:margin-left .18s ease;z-index:1000;
+}
+#panel.collapsed{margin-left:calc(-1 * var(--leftw) - 1px)}
+.panel-head{
+  height:38px;flex:0 0 38px;display:flex;align-items:center;gap:8px;padding:0 12px;
+  border-bottom:1px solid var(--border);background:#0a1119;
+}
+.panel-head .ph-title{font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:600;color:var(--text)}
+.panel-head .ph-ic{color:var(--accent)}
+.panel-head .ph-x{margin-left:auto;color:var(--muted);width:24px;height:24px;border-radius:5px;border:none;background:none;display:grid;place-items:center}
+.panel-head .ph-x:hover{background:#12202e;color:var(--text)}
+.panel-body{flex:1;overflow-y:auto;overflow-x:hidden}
+.view{display:none;padding:12px}
+.view.active{display:block}
+
+/* Section blocks */
+.sec{margin-bottom:16px}
+.sec-t{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.sec-t::after{content:'';flex:1;height:1px;background:var(--border)}
+.field{margin-bottom:9px}
+.field label{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:4px}
+.inp,.sel,.ta{
+  width:100%;height:30px;border-radius:6px;border:1px solid var(--border);
+  background:#070d14;padding:0 9px;color:var(--text);outline:none;
+}
+.ta{height:auto;min-height:64px;padding:7px 9px;resize:vertical;font-family:var(--mono);font-size:11px;line-height:1.5}
+.inp:focus,.sel:focus,.ta:focus{border-color:var(--accent-dim);box-shadow:0 0 0 2px var(--accent-glow)}
+.sel{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M1 3l4 4 4-4' stroke='%235f7488' stroke-width='1.4' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:26px}
+.row{display:flex;gap:8px}
+.row>*{flex:1;min-width:0}
+.btn{
+  height:30px;border-radius:6px;border:1px solid var(--border);background:#0c141d;color:var(--text);
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 12px;white-space:nowrap;
+}
+.btn:hover{border-color:var(--border-2);background:#101c28}
+.btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent-dim));color:#04110d;border-color:transparent;font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent}
+.btn.danger{border-color:#4a1f2b;color:#ff8098}
+.btn.danger:hover{background:#1e0f14;border-color:var(--danger)}
+.btn.sm{height:26px;padding:0 9px;font-size:11px}
+.btn.full{width:100%}
+.btn.warn{border-color:#4a3a15;color:var(--warn)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.btnrow .btn{flex:1}
+.hint{font-size:10.5px;color:var(--muted);line-height:1.5;margin:6px 0}
+.hint.warn{color:var(--warn)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:20px;border:1px solid var(--border-2);color:var(--text-2)}
+
+/* toggle switch */
+.sw{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0}
+.sw label{font-size:12px;color:var(--text);text-transform:none;letter-spacing:0;margin:0}
+.sw .desc{font-size:10px;color:var(--muted);margin-top:1px}
+.toggle{width:36px;height:20px;border-radius:20px;background:#1a2836;border:1px solid var(--border-2);position:relative;flex:0 0 auto;transition:.15s}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#65788c;transition:.15s}
+.toggle.on{background:var(--accent-dim);border-color:var(--accent)}
+.toggle.on::after{left:18px;background:#eafffb}
+
+/* Basemap grid */
+.bm-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bm{border:1px solid var(--border);border-radius:7px;overflow:hidden;cursor:pointer;background:#0a121a;position:relative}
+.bm.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-glow)}
+.bm .thumb{height:46px;background-size:cover;background-position:center}
+.bm .nm{font-size:10px;padding:4px 6px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-2)}
+.bm.active .nm{color:var(--accent)}
+
+/* Data list */
+.list-tools{display:flex;gap:6px;margin-bottom:8px;align-items:center}
+.list-tools .inp{height:28px}
+.filter-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px}
+.chip{
+  font-size:10px;padding:3px 8px;border-radius:20px;border:1px solid var(--border);background:#0a121a;
+  color:var(--text-2);cursor:pointer;display:inline-flex;align-items:center;gap:5px;user-select:none;
+}
+.chip .cdot{width:7px;height:7px;border-radius:50%}
+.chip.on{border-color:var(--accent);color:var(--text);background:#0d1b26}
+.feat{
+  display:flex;align-items:center;gap:9px;padding:7px 8px;border:1px solid transparent;border-radius:7px;cursor:pointer;margin-bottom:3px;
+}
+.feat:hover{background:#0c1622;border-color:var(--border)}
+.feat.selected{background:#0d1e29;border-color:var(--accent-dim)}
+.feat .fcheck{width:15px;height:15px;border-radius:4px;border:1px solid var(--border-2);flex:0 0 auto;display:grid;place-items:center;color:transparent}
+.feat.selected .fcheck{background:var(--accent);border-color:var(--accent);color:#04110d}
+.feat .fdot{width:9px;height:9px;border-radius:2px;flex:0 0 auto}
+.feat .fmeta{flex:1;min-width:0}
+.feat .fname{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feat .fsub{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono);margin-top:1px}
+.feat .fvis{color:var(--muted);width:22px;height:22px;border:none;background:none;border-radius:4px;display:grid;place-items:center;flex:0 0 auto}
+.feat .fvis:hover{color:var(--text);background:#132234}
+.feat.hidden-feat{opacity:.42}
+.empty{text-align:center;color:var(--muted);font-size:11px;padding:26px 10px;line-height:1.6}
+.empty svg{opacity:.4;margin-bottom:8px}
+
+/* Legend */
+.legend-item{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-2);padding:3px 0}
+.legend-item .lg{width:10px;height:10px;border-radius:2px}
+.count-tag{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+/* Stats */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat-card{border:1px solid var(--border);border-radius:7px;padding:9px 10px;background:#0a121a}
+.stat-card .sv{font-size:20px;font-weight:700;font-family:var(--mono);color:var(--accent)}
+.stat-card .sl{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+
+/* OSINT source rows */
+.src{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:9px;background:#0a121a}
+.src .st{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.src .st .si{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;background:#0f1c28;border:1px solid var(--border-2)}
+.src .st .sn{font-weight:600;font-size:12px}
+.src .st .sd{font-size:10px;color:var(--muted)}
+
+/* Map area */
+#mapwrap{flex:1;position:relative;min-width:0;background:#04070b}
+#map{position:absolute;inset:0}
+/* corner brackets */
+#mapwrap::before,#mapwrap::after{content:'';position:absolute;width:26px;height:26px;pointer-events:none;z-index:500;opacity:.5}
+#mapwrap::before{top:10px;left:10px;border-top:2px solid var(--accent);border-left:2px solid var(--accent)}
+#mapwrap::after{bottom:32px;right:10px;border-bottom:2px solid var(--accent);border-right:2px solid var(--accent)}
+.corner-tr,.corner-bl{position:absolute;width:26px;height:26px;pointer-events:none;z-index:500;opacity:.5}
+.corner-tr{top:10px;right:10px;border-top:2px solid var(--accent);border-right:2px solid var(--accent)}
+.corner-bl{bottom:32px;left:10px;border-bottom:2px solid var(--accent);border-left:2px solid var(--accent)}
+
+/* Map floating toolbar */
+.maptools{position:absolute;top:12px;left:12px;z-index:600;display:flex;flex-direction:column;gap:5px;
+  background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:9px;padding:5px;box-shadow:var(--shadow)}
+.maptools .mt{width:34px;height:34px;border-radius:7px;border:1px solid transparent;background:transparent;color:var(--text-2);display:grid;place-items:center;position:relative}
+.maptools .mt:hover{background:#12202e;color:var(--text)}
+.maptools .mt.active{background:#0e2230;color:var(--accent);border-color:var(--accent-dim);box-shadow:0 0 0 1px var(--accent-glow)}
+.maptools .mt svg{width:18px;height:18px}
+.mt-sep{height:1px;background:var(--border);margin:2px 4px}
+.tip{position:absolute;left:42px;top:50%;transform:translateY(-50%);white-space:nowrap;background:#0b1420;border:1px solid var(--border-2);
+  color:var(--text);font-size:11px;padding:4px 8px;border-radius:5px;opacity:0;pointer-events:none;transition:.12s;z-index:700}
+.tip .k{color:var(--muted);font-family:var(--mono);margin-left:6px}
+.mt:hover .tip,.zbtn:hover .tip{opacity:1}
+
+/* Zoom + right controls */
+.mapright{position:absolute;top:12px;right:12px;z-index:600;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.zoomctl{background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:9px;padding:5px;display:flex;flex-direction:column;gap:4px;box-shadow:var(--shadow)}
+.zbtn{width:32px;height:30px;border-radius:6px;border:none;background:transparent;color:var(--text-2);display:grid;place-items:center;position:relative}
+.zbtn:hover{background:#12202e;color:var(--text)}
+
+/* Details card */
+#details{position:absolute;top:12px;right:56px;width:326px;max-height:calc(100% - 48px);z-index:650;
+  background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--border-2);border-radius:11px;
+  box-shadow:var(--shadow);display:none;flex-direction:column;overflow:hidden}
+#details.open{display:flex}
+.det-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:#0b131c}
+.det-head .dh-dot{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+.det-head .dh-t{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.det-head .dh-x{margin-left:auto;color:var(--muted);width:24px;height:24px;border-radius:5px;border:none;background:none;display:grid;place-items:center}
+.det-head .dh-x:hover{background:#12202e;color:var(--text)}
+.det-body{padding:12px;overflow-y:auto}
+.kv{display:grid;grid-template-columns:74px 1fr;gap:6px 10px;font-size:11.5px;margin-bottom:10px}
+.kv .k{color:var(--muted);text-transform:uppercase;font-size:9.5px;letter-spacing:.1em;padding-top:2px}
+.kv .v{color:var(--text);font-family:var(--mono);word-break:break-word}
+.kv .v.copy{cursor:pointer}
+.kv .v.copy:hover{color:var(--accent)}
+.prop-row{display:flex;gap:6px;margin-bottom:6px}
+.prop-row .inp{height:27px;font-size:11px}
+.prop-row .kk{flex:0 0 40%}
+.prop-row .rm{width:27px;flex:0 0 27px;padding:0;color:var(--muted)}
+
+/* Status bar */
+#statusbar{
+  height:26px;flex:0 0 26px;display:flex;align-items:center;gap:0;padding:0;
+  background:#070c12;border-top:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text-2);z-index:1200;
+}
+.sb{display:flex;align-items:center;gap:7px;padding:0 12px;height:100%;border-right:1px solid var(--border);white-space:nowrap}
+.sb .lbl{color:var(--muted);font-size:9px;letter-spacing:.1em}
+.sb.click{cursor:pointer}
+.sb.click:hover{background:#0d1824;color:var(--text)}
+.sb .val{color:var(--text)}
+#sbFill{flex:1;border-right:none}
+#sbFill .spacer{flex:1}
+.sb.rl{border-right:none;border-left:1px solid var(--border)}
+
+/* Toasts */
+#toasts{position:fixed;bottom:36px;right:14px;z-index:3000;display:flex;flex-direction:column;gap:8px;max-width:340px}
+.toast{background:var(--panel-solid);border:1px solid var(--border-2);border-left:3px solid var(--accent);border-radius:8px;
+  padding:9px 12px;box-shadow:var(--shadow);animation:slidein .2s ease;display:flex;gap:9px;align-items:flex-start}
+.toast.ok{border-left-color:var(--ok)}
+.toast.err{border-left-color:var(--danger)}
+.toast.warn{border-left-color:var(--warn)}
+.toast.info{border-left-color:var(--info)}
+.toast .tt{font-size:12px;color:var(--text);font-weight:500}
+.toast .tm{font-size:11px;color:var(--text-2);margin-top:2px;line-height:1.4}
+@keyframes slidein{from{transform:translateX(30px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* Modal / command palette */
+.overlay{position:fixed;inset:0;background:rgba(2,5,9,.72);backdrop-filter:blur(3px);z-index:2000;display:none;align-items:flex-start;justify-content:center;padding-top:12vh}
+.overlay.open{display:flex}
+.cmdbox{width:min(620px,92vw);background:var(--panel-solid);border:1px solid var(--border-2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.cmdbox .cin{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid var(--border)}
+.cmdbox .cin input{flex:1;background:none;border:none;outline:none;font-size:15px;color:var(--text)}
+.cmdlist{max-height:52vh;overflow:auto;padding:6px}
+.cmd{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:7px;cursor:pointer}
+.cmd.active{background:#0e1e2a}
+.cmd .ci{color:var(--accent);width:18px;display:grid;place-items:center}
+.cmd .ct{font-size:13px;color:var(--text)}
+.cmd .cs{font-size:10px;color:var(--muted);margin-left:auto;font-family:var(--mono)}
+.cmd .cat{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-left:8px}
+
+/* generic modal */
+.modal{width:min(560px,94vw);background:var(--panel-solid);border:1px solid var(--border-2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;max-height:82vh;display:flex;flex-direction:column}
+.modal .mh{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--border)}
+.modal .mh .mt2{font-size:14px;font-weight:600;letter-spacing:.04em}
+.modal .mh .mx{margin-left:auto;color:var(--muted);background:none;border:none;width:26px;height:26px;border-radius:6px;display:grid;place-items:center}
+.modal .mh .mx:hover{background:#12202e;color:var(--text)}
+.modal .mb{padding:16px;overflow:auto}
+.modal .mf{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end}
+
+/* Context menu */
+#ctxmenu{position:fixed;z-index:2500;background:var(--panel-solid);border:1px solid var(--border-2);border-radius:9px;box-shadow:var(--shadow);padding:5px;min-width:210px;display:none}
+.ctx-i{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text)}
+.ctx-i:hover{background:#0e1e2a}
+.ctx-i .cxi{color:var(--accent);width:16px;display:grid;place-items:center}
+.ctx-i .cxs{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
+.ctx-sep{height:1px;background:var(--border);margin:4px 6px}
+.ctx-coords{padding:7px 10px;font-family:var(--mono);font-size:10.5px;color:var(--text-2);border-bottom:1px solid var(--border);margin-bottom:4px}
+.ctx-coords .c1{color:var(--accent)}
+
+/* Leaflet dark overrides */
+.leaflet-container{background:#04070b;font-family:var(--sans)}
+.leaflet-bar,.leaflet-control-attribution{background:rgba(8,14,20,.82) !important;color:var(--muted) !important;border-color:var(--border) !important}
+.leaflet-control-attribution a{color:var(--text-2) !important}
+.leaflet-control-scale-line{background:rgba(8,14,20,.7);border-color:var(--border-2);color:var(--text-2);border-radius:3px}
+.leaflet-tooltip{background:#0b1420;border:1px solid var(--border-2);color:var(--text);box-shadow:var(--shadow)}
+.leaflet-tooltip-left::before{border-left-color:var(--border-2)}
+.leaflet-tooltip-right::before{border-right-color:var(--border-2)}
+.leaflet-popup-content-wrapper{background:var(--panel-solid);color:var(--text);border:1px solid var(--border-2);border-radius:9px;box-shadow:var(--shadow)}
+.leaflet-popup-tip{background:var(--panel-solid);border:1px solid var(--border-2)}
+.leaflet-popup-content{margin:11px 13px;font-size:12px}
+.leaflet-draw-tooltip{background:#0b1420;border:1px solid var(--accent-dim);color:var(--text)}
+.leaflet-control-zoom{display:none}
+
+/* Tactical markers */
+.tac-marker{background:none;border:none}
+.tac-marker .m-dot{
+  width:16px;height:16px;border-radius:50%;border:2px solid #05080c;
+  box-shadow:0 0 0 1.5px var(--c,#2dd4bf),0 0 10px var(--c,#2dd4bf);
+  background:var(--c,#2dd4bf);display:grid;place-items:center;position:relative;
+  transition:transform .1s;
+}
+.tac-marker.sel .m-dot{transform:scale(1.18)}
+.tac-marker.sel .m-dot::after{content:'';position:absolute;inset:-7px;border-radius:50%;border:1.5px dashed var(--c,#2dd4bf);animation:spin 6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tac-marker .m-glyph{font-size:9px;line-height:1;color:#04110d;font-weight:800;font-family:var(--sans)}
+.tac-label{background:none;border:none;color:var(--text);font-size:10px;font-family:var(--mono);text-shadow:0 1px 3px #000,0 0 4px #000;white-space:nowrap}
+.grat-label{background:none;border:none;color:var(--text-2);font-size:9px;font-family:var(--mono);opacity:.6}
+
+.marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background:rgba(45,212,191,.18)}
+.marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background:rgba(45,212,191,.35);color:#eafffb;font-family:var(--mono);font-weight:600;border:1px solid var(--accent-dim)}
+
+/* selected shape pulse handled via style */
+.loading-spin{width:14px;height:14px;border:2px solid var(--border-2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block}
+
+/* Scenario presets */
+.scen{display:flex;gap:9px;align-items:center;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:7px;cursor:pointer;background:#0a121a}
+.scen:hover{border-color:var(--accent-dim);background:#0c1723}
+.scen .sci{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;background:#0f1c28;color:var(--accent);border:1px solid var(--border-2)}
+.scen .scn{font-size:12px;font-weight:600}
+.scen .scd{font-size:10px;color:var(--muted);margin-top:1px}
+
+@media (max-width:820px){
+  :root{--leftw:290px}
+  #details{right:12px;width:min(326px,calc(100vw - 24px))}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= TOP BAR ================= -->
+  <header id="topbar">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13M15 7v13"/></svg>
+      </div>
+      <div class="title">ATLAS<small>OPS MAP CONSOLE</small></div>
+    </div>
+
+    <div class="topsearch">
+      <span class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></span>
+      <input id="globalSearch" placeholder="Search address, place, coordinate, or MGRS…  " autocomplete="off" spellcheck="false"/>
+      <span class="kbd">⏎</span>
+      <div class="search-results" id="searchResults"></div>
+    </div>
+
+    <div class="top-status">
+      <div class="stat-chip" title="Backend link status"><span class="dot" id="beDot"></span><span id="beLabel">BACKEND OFF</span></div>
+      <div class="stat-chip" title="Features loaded"><span id="featCount">0</span> FEAT</div>
+      <div class="stat-chip" id="clock" title="UTC time">--:--:--Z</div>
+      <button class="tbtn" id="btnCmd" title="Command palette (Ctrl+K)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>CMD</button>
+      <button class="tbtn" id="btnHelp" title="Help & shortcuts">?</button>
+    </div>
+  </header>
+
+  <!-- ================= BODY ================= -->
+  <div id="body">
+
+    <!-- Icon rail -->
+    <nav id="rail">
+      <button class="rail-btn active" data-panel="data" title="Data & Layers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h18M3 12h18M3 19h18"/><circle cx="7" cy="5" r="1.5" fill="currentColor"/><circle cx="14" cy="12" r="1.5" fill="currentColor"/><circle cx="10" cy="19" r="1.5" fill="currentColor"/></svg><span class="badge hide" id="railBadge">0</span></button>
+      <button class="rail-btn" data-panel="layers" title="Basemaps & overlays"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
+      <button class="rail-btn" data-panel="add" title="Add / draw features"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-6.5-7-12a7 7 0 0114 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg></button>
+      <button class="rail-btn" data-panel="osint" title="OSINT feeds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.8 3.8 9S14.5 18.5 12 21c-2.5-2.5-3.8-5.8-3.8-9S9.5 5.5 12 3z"/></svg></button>
+      <button class="rail-btn" data-panel="connect" title="Backend connector"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg></button>
+      <button class="rail-btn" data-panel="export" title="Export & sync"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M4 15v4a2 2 0 002 2h12a2 2 0 002-2v-4"/></svg></button>
+      <div class="rail-sep"></div>
+      <button class="rail-btn" data-panel="settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg></button>
+    </nav>
+
+    <!-- Left panel -->
+    <aside id="panel">
+      <div class="panel-head">
+        <span class="ph-ic" id="panelIc"></span>
+        <span class="ph-title" id="panelTitle">DATA</span>
+        <button class="ph-x" id="panelCollapse" title="Collapse panel (\\)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+      </div>
+      <div class="panel-body">
+
+        <!-- ===== DATA VIEW ===== -->
+        <section class="view active" id="view-data">
+          <div class="list-tools">
+            <input class="inp" id="featFilter" placeholder="Filter features…" autocomplete="off"/>
+            <button class="btn sm" id="selAllBtn" title="Select all shown">ALL</button>
+            <button class="btn sm" id="selNoneBtn" title="Clear selection">NONE</button>
+          </div>
+          <div class="filter-chips" id="sourceChips"></div>
+          <div class="filter-chips" id="catChips"></div>
+          <div id="featList"></div>
+        </section>
+
+        <!-- ===== LAYERS VIEW ===== -->
+        <section class="view" id="view-layers">
+          <div class="sec">
+            <div class="sec-t">Basemap</div>
+            <div class="bm-grid" id="basemapGrid"></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Overlays</div>
+            <div class="sw"><div><label>Reference labels</label><div class="desc">Place/road labels over imagery</div></div><div class="toggle" data-toggle="labels"></div></div>
+            <div class="sw"><div><label>Coordinate graticule</label><div class="desc">Lat/Lng grid lines</div></div><div class="toggle" data-toggle="graticule"></div></div>
+            <div class="sw"><div><label>Cluster point features</label><div class="desc">Group dense markers</div></div><div class="toggle on" data-toggle="cluster"></div></div>
+            <div class="sw"><div><label>Feature labels</label><div class="desc">Show names on map</div></div><div class="toggle" data-toggle="featLabels"></div></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Color features by</div>
+            <select class="sel" id="colorBySel">
+              <option value="category">Category</option>
+              <option value="source">Source</option>
+              <option value="type">Geometry type</option>
+            </select>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Legend</div>
+            <div id="legend"></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Overview</div>
+            <div class="stat-grid" id="statGrid"></div>
+          </div>
+        </section>
+
+        <!-- ===== ADD / DRAW VIEW ===== -->
+        <section class="view" id="view-add">
+          <div class="sec">
+            <div class="sec-t">Add by address</div>
+            <div class="field"><input class="inp" id="addrInput" placeholder="1600 Pennsylvania Ave NW…"/></div>
+            <div class="row">
+              <button class="btn primary" id="addrGeocode">Geocode &amp; place</button>
+            </div>
+            <div class="hint">Uses OpenStreetMap Nominatim. Result is added as a point you can rename/categorize.</div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Add by coordinate</div>
+            <div class="field"><label>Lat / Lng, or MGRS, or UTM</label><input class="inp" id="coordInput" placeholder="38.8977, -77.0365   ·   18S UJ 23480 06479"/></div>
+            <button class="btn primary full" id="coordPlace">Place point</button>
+            <div class="hint">Accepts decimal degrees, "lat, lng", MGRS grid refs, or "zone band easting northing" UTM.</div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Draw on map</div>
+            <div class="hint">Select a tool, draw on the map. Shapes are added as editable features. Shortcuts in brackets.</div>
+            <div class="btnrow">
+              <button class="btn sm" data-draw="marker">◍ Point <span style="color:var(--muted)">M</span></button>
+              <button class="btn sm" data-draw="polyline">╱ Line <span style="color:var(--muted)">L</span></button>
+              <button class="btn sm" data-draw="polygon">⬠ Polygon <span style="color:var(--muted)">P</span></button>
+            </div>
+            <div class="btnrow" style="margin-top:8px">
+              <button class="btn sm" data-draw="rectangle">▭ Rect <span style="color:var(--muted)">R</span></button>
+              <button class="btn sm" data-draw="circle">◯ Circle <span style="color:var(--muted)">C</span></button>
+              <button class="btn sm" id="stopDraw">✕ Cancel</button>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Defaults for new features</div>
+            <div class="field"><label>Category</label><select class="sel" id="defCat"></select></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Scenario presets</div>
+            <div id="scenList"></div>
+          </div>
+        </section>
+
+        <!-- ===== OSINT VIEW ===== -->
+        <section class="view" id="view-osint">
+          <div class="hint">Pull open-source geodata into the workspace. Most feeds query the current map view — pan/zoom to your area of interest first.</div>
+
+          <div class="src">
+            <div class="st"><div class="si">🏢</div><div><div class="sn">OSM Overpass</div><div class="sd">POIs & infrastructure in view</div></div></div>
+            <div class="field"><select class="sel" id="ovpPreset">
+              <option value="amenity=hospital">Hospitals</option>
+              <option value="amenity=police">Police stations</option>
+              <option value="amenity=fire_station">Fire stations</option>
+              <option value="amenity=fuel">Fuel stations</option>
+              <option value="amenity=pharmacy">Pharmacies</option>
+              <option value="amenity=school">Schools</option>
+              <option value="amenity=shelter">Shelters</option>
+              <option value="emergency=*">Emergency (any)</option>
+              <option value="shop=supermarket">Supermarkets</option>
+              <option value="amenity=restaurant">Restaurants</option>
+              <option value="__custom">Custom key=value…</option>
+            </select></div>
+            <div class="field hide" id="ovpCustomWrap"><input class="inp" id="ovpCustom" placeholder="e.g. man_made=tower"/></div>
+            <button class="btn full sm" id="ovpRun">Query view</button>
+          </div>
+
+          <div class="src">
+            <div class="st"><div class="si">🌐</div><div><div class="sn">USGS Seismic</div><div class="sd">Recent earthquakes (global)</div></div></div>
+            <div class="field"><select class="sel" id="usgsFeed">
+              <option value="all_hour">Past hour · all</option>
+              <option value="all_day" selected>Past day · all</option>
+              <option value="2.5_day">Past day · M2.5+</option>
+              <option value="4.5_week">Past week · M4.5+</option>
+              <option value="significant_month">Past month · significant</option>
+            </select></div>
+            <button class="btn full sm" id="usgsRun">Load earthquakes</button>
+          </div>
+
+          <div class="src">
+            <div class="st"><div class="si">⚠️</div><div><div class="sn">NWS Weather Alerts</div><div class="sd">Active US alerts (api.weather.gov)</div></div></div>
+            <button class="btn full sm" id="nwsRun">Load active alerts</button>
+          </div>
+
+          <div class="src">
+            <div class="st"><div class="si">📚</div><div><div class="sn">Wikipedia Geosearch</div><div class="sd">Articles near map center</div></div></div>
+            <button class="btn full sm" id="wikiRun">Load nearby articles</button>
+          </div>
+
+          <div class="src">
+            <div class="st"><div class="si">🔗</div><div><div class="sn">Generic GeoJSON URL</div><div class="sd">Any CORS-enabled feed</div></div></div>
+            <div class="field"><input class="inp" id="geojsonUrl" placeholder="https://…/data.geojson"/></div>
+            <div class="field"><input class="inp" id="geojsonUrlName" placeholder="Layer/source name (optional)"/></div>
+            <button class="btn full sm" id="geojsonUrlRun">Fetch &amp; load</button>
+          </div>
+        </section>
+
+        <!-- ===== CONNECT (backend) VIEW ===== -->
+        <section class="view" id="view-connect">
+          <div class="hint">Connect to your own REST/GeoJSON backend to load and push records. Config is stored locally in this browser.</div>
+          <div class="sec">
+            <div class="sec-t">Endpoint</div>
+            <div class="field"><label>Base URL</label><input class="inp" id="beBase" placeholder="https://api.example.com"/></div>
+            <div class="row">
+              <div class="field"><label>Fetch path (GET)</label><input class="inp" id="beFetch" placeholder="/features"/></div>
+              <div class="field"><label>Create path (POST)</label><input class="inp" id="beCreate" placeholder="/features"/></div>
+            </div>
+            <div class="field"><label>Update path (PUT · use :id)</label><input class="inp" id="beUpdate" placeholder="/features/:id"/></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Auth</div>
+            <div class="row">
+              <div class="field"><label>Header name</label><input class="inp" id="beAuthName" placeholder="Authorization"/></div>
+              <div class="field"><label>Header value</label><input class="inp" id="beAuthVal" placeholder="Bearer …"/></div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">ID / property mapping</div>
+            <div class="row">
+              <div class="field"><label>ID field</label><input class="inp" id="beIdField" placeholder="id" value="id"/></div>
+              <div class="field"><label>Response array path</label><input class="inp" id="beArrPath" placeholder="features / data / (blank)"/></div>
+            </div>
+            <div class="hint">If the response is a GeoJSON FeatureCollection, leave array path blank. Otherwise give the JSON key holding the record array (each record needs GeoJSON <span class="mono">geometry</span> + <span class="mono">properties</span>, or lat/lng fields).</div>
+          </div>
+          <div class="btnrow">
+            <button class="btn primary" id="beTest">Test link</button>
+            <button class="btn" id="beLoad">Load records</button>
+          </div>
+          <div class="sw" style="margin-top:8px"><div><label>Auto-load on connect</label></div><div class="toggle" data-toggle="autoload"></div></div>
+          <div class="sec" style="margin-top:12px">
+            <div class="sec-t">Link log</div>
+            <div id="beLog" style="font-family:var(--mono);font-size:10.5px;color:var(--text-2);background:#070d14;border:1px solid var(--border);border-radius:7px;padding:8px;min-height:60px;max-height:150px;overflow:auto;white-space:pre-wrap"></div>
+          </div>
+        </section>
+
+        <!-- ===== EXPORT VIEW ===== -->
+        <section class="view" id="view-export">
+          <div class="sec">
+            <div class="sec-t">Scope</div>
+            <select class="sel" id="expScope">
+              <option value="selected">Selected features</option>
+              <option value="visible">Visible (filtered)</option>
+              <option value="all">All features</option>
+            </select>
+            <div class="hint" id="expScopeInfo">0 features in scope.</div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Export to text</div>
+            <div class="row">
+              <button class="btn" id="expBuild">Build GeoJSON</button>
+              <button class="btn" id="expCopy">Copy</button>
+              <button class="btn" id="expDownload">Download</button>
+            </div>
+            <div class="field" style="margin-top:8px"><textarea class="ta" id="expText" style="min-height:150px" placeholder="GeoJSON output appears here…" spellcheck="false"></textarea></div>
+            <div class="sw"><div><label>Circles → polygons</label><div class="desc">Approximate circles as 64-pt polygons</div></div><div class="toggle" data-toggle="circlePoly"></div></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Push to backend</div>
+            <div class="hint">New features (no backend ID) are <b>created</b> via POST. Features loaded from the backend are <b>updated</b> via PUT.</div>
+            <button class="btn primary full" id="bePush">Push scope to backend</button>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Project (local)</div>
+            <div class="hint">Full workspace incl. features, config &amp; view.</div>
+            <div class="btnrow">
+              <button class="btn sm" id="prjSave">Save local</button>
+              <button class="btn sm" id="prjLoad">Restore local</button>
+            </div>
+            <div class="btnrow" style="margin-top:8px">
+              <button class="btn sm" id="prjExport">Export file</button>
+              <button class="btn sm" id="prjImport">Import file</button>
+            </div>
+            <div class="btnrow" style="margin-top:8px">
+              <button class="btn sm" id="importGeojsonBtn">Import GeoJSON…</button>
+              <button class="btn sm danger" id="clearAll">Clear all</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== SETTINGS VIEW ===== -->
+        <section class="view" id="view-settings">
+          <div class="sec">
+            <div class="sec-t">Accent</div>
+            <div class="btnrow" id="accentRow"></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Coordinate readout</div>
+            <div class="field"><label>Primary format</label><select class="sel" id="coordFmt">
+              <option value="latlng">Decimal degrees</option>
+              <option value="dms">Deg/min/sec (DMS)</option>
+              <option value="mgrs">MGRS</option>
+              <option value="utm">UTM</option>
+            </select></div>
+            <div class="field"><label>Decimal precision</label><select class="sel" id="coordPrec">
+              <option>3</option><option>4</option><option selected>5</option><option>6</option>
+            </select></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Units</div>
+            <select class="sel" id="unitSel"><option value="metric">Metric (m / km / km²)</option><option value="imperial">Imperial (ft / mi / mi²)</option><option value="nautical">Nautical (NM)</option></select>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Behavior</div>
+            <div class="sw"><div><label>Reverse-geocode on drop</label><div class="desc">Auto-name points with nearest address</div></div><div class="toggle" data-toggle="revgeo"></div></div>
+            <div class="sw"><div><label>Autosave workspace</label><div class="desc">Persist to local storage on change</div></div><div class="toggle on" data-toggle="autosave"></div></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">About</div>
+            <div class="hint">ATLAS is a single-file operational mapping console. All processing is client-side; OSINT feeds and your backend are called directly from your browser. No data leaves this machine except calls you initiate.</div>
+          </div>
+        </section>
+
+      </div>
+    </aside>
+
+    <!-- Map -->
+    <main id="mapwrap">
+      <div id="map"></div>
+      <div class="corner-tr"></div>
+      <div class="corner-bl"></div>
+
+      <!-- Draw / tools toolbar -->
+      <div class="maptools">
+        <button class="mt active" data-tool="pan" title="Pan / select"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3l14 8-6 2-2 6z"/></svg><span class="tip">Pan / Select</span></button>
+        <div class="mt-sep"></div>
+        <button class="mt" data-tool="marker" title="Point"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-6.5-7-12a7 7 0 0114 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg><span class="tip">Point <span class="k">M</span></span></button>
+        <button class="mt" data-tool="polyline" title="Line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20L20 4"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg><span class="tip">Line <span class="k">L</span></span></button>
+        <button class="mt" data-tool="polygon" title="Polygon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 6-3 10H7L4 9z"/></svg><span class="tip">Polygon <span class="k">P</span></span></button>
+        <button class="mt" data-tool="rectangle" title="Rectangle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="6" width="16" height="12" rx="1"/></svg><span class="tip">Rectangle <span class="k">R</span></span></button>
+        <button class="mt" data-tool="circle" title="Circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/></svg><span class="tip">Circle <span class="k">C</span></span></button>
+        <div class="mt-sep"></div>
+        <button class="mt" data-tool="measure" title="Measure distance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M11 9l2 2M15 5l2 2"/></svg><span class="tip">Measure dist <span class="k">D</span></span></button>
+        <button class="mt" data-tool="measureArea" title="Measure area"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/></svg><span class="tip">Measure area <span class="k">A</span></span></button>
+        <button class="mt" data-tool="pick" title="Pick coordinate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><span class="tip">Pick coord</span></button>
+        <div class="mt-sep"></div>
+        <button class="mt" id="btnLocate" title="Locate me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span class="tip">Locate me</span></button>
+        <button class="mt" id="btnFit" title="Fit all features"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"/></svg><span class="tip">Fit all <span class="k">F</span></span></button>
+        <button class="mt" id="btnFull" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="tip">Fullscreen</span></button>
+      </div>
+
+      <div class="mapright">
+        <div class="zoomctl">
+          <button class="zbtn" id="zoomIn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="zbtn" id="zoomOut"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg></button>
+        </div>
+      </div>
+
+      <!-- Feature details card -->
+      <div id="details">
+        <div class="det-head">
+          <span class="dh-dot" id="detDot"></span>
+          <span class="dh-t" id="detType">FEATURE</span>
+          <button class="dh-x" id="detClose">✕</button>
+        </div>
+        <div class="det-body" id="detBody"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ================= STATUS BAR ================= -->
+  <footer id="statusbar">
+    <div class="sb click" id="sbLatLng" title="Click to copy"><span class="lbl">LAT/LNG</span><span class="val" id="stLL">— , —</span></div>
+    <div class="sb click" id="sbMgrs" title="Click to copy"><span class="lbl">MGRS</span><span class="val" id="stMgrs">—</span></div>
+    <div class="sb"><span class="lbl">ZOOM</span><span class="val" id="stZoom">—</span></div>
+    <div class="sb"><span class="lbl">SCALE</span><span class="val" id="stScale">—</span></div>
+    <div class="sb" id="sbFill"><span class="spacer"></span></div>
+    <div class="sb rl"><span class="lbl">SEL</span><span class="val" id="stSel">0</span></div>
+    <div class="sb rl"><span class="lbl">TOOL</span><span class="val" id="stTool">PAN</span></div>
+    <div class="sb rl"><span class="lbl">BE</span><span class="val" id="stBE">OFFLINE</span></div>
+  </footer>
+</div>
+
+<!-- Toasts -->
+<div id="toasts"></div>
+
+<!-- Context menu -->
+<div id="ctxmenu"></div>
+
+<!-- Command palette -->
+<div class="overlay" id="cmdOverlay">
+  <div class="cmdbox">
+    <div class="cin">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      <input id="cmdInput" placeholder="Type a command or search…" autocomplete="off"/>
+      <span class="kbd" style="position:static">ESC</span>
+    </div>
+    <div class="cmdlist" id="cmdList"></div>
+  </div>
+</div>
+
+<!-- Generic modal -->
+<div class="overlay" id="modalOverlay">
+  <div class="modal" id="modalBox">
+    <div class="mh"><span class="mt2" id="modalTitle">Title</span><button class="mx" id="modalX">✕</button></div>
+    <div class="mb" id="modalBody"></div>
+    <div class="mf" id="modalFoot"></div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".json,.geojson,application/json" class="hide"/>
+
+<!-- ============ EXTERNAL LIBS ============ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mgrs@1.0.0/dist/mgrs.js"></script>
+
+<script>
+/* =================================================================
+   ATLAS — application logic
+   ================================================================= */
+'use strict';
+
+/* ---------- Small helpers ---------- */
+const $  = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+const uid = ()=> 'f'+Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtNum = (n,d=0)=> n==null||isNaN(n)?'—':Number(n).toLocaleString(undefined,{maximumFractionDigits:d});
+
+/* ---------- Config: categories, accents, basemaps ---------- */
+const CATEGORY_COLORS = {
+  Incident:'#ff5470', Hazard:'#f5a524', Seismic:'#fb7185', Alert:'#ef4444',
+  Asset:'#38bdf8', Unit:'#a78bfa', Objective:'#34d399', Boundary:'#22d3ee',
+  Facility:'#60a5fa', Medical:'#f87171', POI:'#e5c07b', Sensor:'#f472b6',
+  Waypoint:'#94a3b8', Store:'#34d399', Competitor:'#fb923c', Territory:'#818cf8',
+  Lead:'#facc15', Site:'#2dd4bf', Reference:'#7dd3fc', Custom:'#9ca3af'
+};
+const CATEGORY_GLYPH = {
+  Incident:'!', Hazard:'△', Seismic:'◉', Alert:'!', Medical:'+', Facility:'▪',
+  Asset:'▸', Unit:'◆', Objective:'✚', Boundary:'', POI:'•', Sensor:'◎',
+  Store:'$', Competitor:'C', Territory:'', Lead:'★', Site:'■', Reference:'w'
+};
+const SOURCE_COLORS = {
+  manual:'#2dd4bf', backend:'#38bdf8', 'osint:overpass':'#a78bfa',
+  'osint:usgs':'#fb7185', 'osint:nws':'#f5a524', 'osint:wikipedia':'#7dd3fc',
+  'osint:geojson':'#34d399', import:'#e5c07b'
+};
+const TYPE_COLORS = { point:'#2dd4bf', line:'#38bdf8', polygon:'#a78bfa', rectangle:'#34d399', circle:'#f5a524' };
+
+const ACCENTS = {
+  teal:['#2dd4bf','#1f9e8f'], green:['#4ade80','#2ea44f'], cyan:['#22d3ee','#0e93ad'],
+  amber:['#f5a524','#b97d12'], blue:['#38bdf8','#1c7cb5'], magenta:['#e879f9','#a739bd'], red:['#ff5470','#c2344c']
+};
+
+const BASEMAPS = {
+  dark:{name:'Tactical Dark',url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',sub:'abcd',attr:'© OpenStreetMap © CARTO',thumb:'https://a.basemaps.cartocdn.com/dark_all/5/9/12.png'},
+  sat:{name:'Satellite',url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',attr:'© Esri, Maxar, Earthstar',thumb:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/5/12/9'},
+  streets:{name:'Streets',url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',sub:'abc',attr:'© OpenStreetMap',thumb:'https://a.tile.openstreetmap.org/5/9/12.png'},
+  terrain:{name:'Terrain',url:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',sub:'abc',attr:'© OpenTopoMap (CC-BY-SA)',thumb:'https://a.tile.opentopomap.org/5/9/12.png'},
+  light:{name:'Light',url:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',sub:'abcd',attr:'© OpenStreetMap © CARTO',thumb:'https://a.basemaps.cartocdn.com/light_all/5/9/12.png'},
+  voyager:{name:'Hybrid',url:'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',sub:'abcd',attr:'© OpenStreetMap © CARTO',thumb:'https://a.basemaps.cartocdn.com/rastertiles/voyager/5/9/12.png'}
+};
+const LABELS_URL='https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
+
+const SCENARIOS = [
+  {id:'eoc',name:'Emergency Ops Center',desc:'Incidents, hazards, units, shelters',icon:'🚨',cats:['Incident','Hazard','Unit','Asset','Facility','Objective']},
+  {id:'biz',name:'Business Review',desc:'Stores, competitors, territories',icon:'🏬',cats:['Store','Competitor','Territory','Lead','Site']},
+  {id:'field',name:'Field / Recon',desc:'Waypoints, sensors, boundaries',icon:'🧭',cats:['Waypoint','Sensor','Boundary','Objective','POI']}
+];
+
+/* ---------- Persistent settings ---------- */
+const SETTINGS_KEY='atlas.settings.v1';
+const PROJECT_KEY='atlas.project.v1';
+const BACKEND_KEY='atlas.backend.v1';
+
+const settings = Object.assign({
+  accent:'teal', coordFmt:'latlng', precision:5, units:'metric',
+  cluster:true, graticule:false, labels:false, featLabels:false,
+  colorBy:'category', revgeo:false, autosave:true, autoload:false, circlePoly:false,
+  defCat:'Waypoint', basemap:'dark'
+}, loadJSON(SETTINGS_KEY,{}));
+
+function loadJSON(k,def){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return def; } }
+function saveJSON(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function saveSettings(){ saveJSON(SETTINGS_KEY,settings); }
+
+/* ---------- App state ---------- */
+const state = {
+  features:new Map(),
+  selection:new Set(),
+  detailId:null,
+  activePanel:'data',
+  tool:'pan',
+  drawHandler:null,
+  filters:{ text:'', sources:new Set(), cats:new Set() },
+  backend:{ online:false, cfg:loadJSON(BACKEND_KEY,{base:'',fetch:'/features',create:'/features',update:'/features/:id',authName:'Authorization',authVal:'',idField:'id',arrPath:''}) }
+};
+
+/* =================================================================
+   MAP SETUP
+   ================================================================= */
+const map = L.map('map',{ zoomControl:false, attributionControl:true, worldCopyJump:true, minZoom:2, maxZoom:19 })
+  .setView([39.5,-98.35], 4);
+
+let baseLayer=null, labelLayer=null;
+function setBasemap(id){
+  const b=BASEMAPS[id]; if(!b) return;
+  if(baseLayer) map.removeLayer(baseLayer);
+  const opts={attribution:b.attr,maxZoom:19,crossOrigin:true};
+  if(b.sub) opts.subdomains=b.sub.split('');
+  baseLayer=L.tileLayer(b.url,opts).addTo(map);
+  baseLayer.bringToBack();
+  settings.basemap=id; saveSettings();
+  $$('#basemapGrid .bm').forEach(el=>el.classList.toggle('active',el.dataset.bm===id));
+}
+function setLabels(on){
+  if(on && !labelLayer){ labelLayer=L.tileLayer(LABELS_URL,{maxZoom:19,opacity:.9,pane:'shadowPane'}).addTo(map); }
+  else if(!on && labelLayer){ map.removeLayer(labelLayer); labelLayer=null; }
+}
+
+/* feature groups */
+const shapeGroup = L.featureGroup().addTo(map);      // polygons/lines/rect/circle (editable)
+let markerGroup  = makeMarkerGroup();                // points
+const graticuleLayer = L.layerGroup().addTo(map);
+const measureLayer = L.layerGroup().addTo(map);
+let locateLayer = null;
+
+function makeMarkerGroup(){
+  const g = settings.cluster
+    ? L.markerClusterGroup({ maxClusterRadius:48, spiderfyOnMaxZoom:true, showCoverageOnHover:false, chunkedLoading:true })
+    : L.featureGroup();
+  g.addTo(map);
+  return g;
+}
+function rebuildMarkerGroup(){
+  map.removeLayer(markerGroup);
+  markerGroup = makeMarkerGroup();
+  state.features.forEach(f=>{ if(f.type==='point' && f.layer && isVisible(f)) markerGroup.addLayer(f.layer); });
+}
+
+/* scale control */
+L.control.scale({position:'bottomleft',imperial:settings.units==='imperial',metric:settings.units!=='imperial'}).addTo(map);
+
+/* =================================================================
+   COORDINATE UTILITIES  (Lat/Lng, DMS, UTM, MGRS)
+   ================================================================= */
+function latLngToUTM(lat,lon){
+  const a=6378137.0, e2=0.00669438, k0=0.9996;
+  const rad=Math.PI/180;
+  let zone=Math.floor((lon+180)/6)+1;
+  const lonOrigin=(zone-1)*6-180+3;
+  const ep2=e2/(1-e2);
+  const latR=lat*rad, lonR=lon*rad, lonOR=lonOrigin*rad;
+  const N=a/Math.sqrt(1-e2*Math.sin(latR)**2);
+  const T=Math.tan(latR)**2;
+  const C=ep2*Math.cos(latR)**2;
+  const A=Math.cos(latR)*(lonR-lonOR);
+  const M=a*((1-e2/4-3*e2*e2/64-5*e2*e2*e2/256)*latR
+    -(3*e2/8+3*e2*e2/32+45*e2*e2*e2/1024)*Math.sin(2*latR)
+    +(15*e2*e2/256+45*e2*e2*e2/1024)*Math.sin(4*latR)
+    -(35*e2*e2*e2/3072)*Math.sin(6*latR));
+  let easting=k0*N*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*ep2)*A**5/120)+500000;
+  let northing=k0*(M+N*Math.tan(latR)*(A*A/2+(5-T+9*C+4*C*C)*A**4/24+(61-58*T+T*T+600*C-330*ep2)*A**6/720));
+  if(lat<0) northing+=1e7;
+  return {zone,easting,northing,band:utmBand(lat)};
+}
+function utmBand(lat){ const bands='CDEFGHJKLMNPQRSTUVWXX'; if(lat<-80||lat>84) return 'Z'; return bands[Math.floor((lat+80)/8)]; }
+
+function toDMS(dec,isLat){
+  const dir = dec<0 ? (isLat?'S':'W') : (isLat?'N':'E');
+  dec=Math.abs(dec);
+  const d=Math.floor(dec), mF=(dec-d)*60, m=Math.floor(mF), s=((mF-m)*60);
+  return `${d}°${String(m).padStart(2,'0')}'${s.toFixed(1).padStart(4,'0')}"${dir}`;
+}
+function toMGRS(lat,lng){
+  try{ if(typeof mgrs!=='undefined' && mgrs.forward){ return mgrs.forward([lng,lat],5); } }catch(e){}
+  return null;
+}
+function fmtMGRS(m){
+  if(!m) return '—';
+  const mt=m.match(/^(\d{1,2}[C-X])([A-Z]{2})(\d+)$/);
+  if(!mt) return m;
+  const digs=mt[3], half=digs.length/2;
+  return `${mt[1]} ${mt[2]} ${digs.slice(0,half)} ${digs.slice(half)}`;
+}
+function fmtUTM(lat,lng){
+  const u=latLngToUTM(lat,lng);
+  return `${u.zone}${u.band} ${Math.round(u.easting)}E ${Math.round(u.northing)}N`;
+}
+function fmtLatLng(lat,lng,p){
+  p=p==null?settings.precision:p;
+  return `${lat.toFixed(p)}, ${lng.toFixed(p)}`;
+}
+function fmtCoord(lat,lng,fmt){
+  fmt=fmt||settings.coordFmt;
+  if(fmt==='dms') return `${toDMS(lat,true)} ${toDMS(lng,false)}`;
+  if(fmt==='mgrs') return fmtMGRS(toMGRS(lat,lng));
+  if(fmt==='utm') return fmtUTM(lat,lng);
+  return fmtLatLng(lat,lng);
+}
+
+/* parse a location string → {lat,lng} */
+function parseLocation(str){
+  str=str.trim();
+  // decimal "lat, lng" or "lat lng"
+  let m=str.match(/^(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)$/);
+  if(m){ const lat=+m[1],lng=+m[2]; if(Math.abs(lat)<=90&&Math.abs(lng)<=180) return {lat,lng}; }
+  // MGRS
+  if(/^\d{1,2}[C-X]\s*[A-Z]{2}/i.test(str.replace(/\s+/g,' '))){
+    try{ if(typeof mgrs!=='undefined'){ const p=mgrs.toPoint(str.replace(/\s+/g,'').toUpperCase()); if(p) return {lat:p[1],lng:p[0]}; } }catch(e){}
+  }
+  // UTM "zone band easting northing"
+  m=str.match(/^(\d{1,2})\s*([C-X])\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/i);
+  if(m){ const ll=utmToLatLng(+m[1],m[2].toUpperCase(),+m[3],+m[4]); if(ll) return ll; }
+  return null;
+}
+function utmToLatLng(zone,band,easting,northing){
+  const a=6378137.0,e2=0.00669438,k0=0.9996;
+  const e1=(1-Math.sqrt(1-e2))/(1+Math.sqrt(1-e2));
+  const x=easting-500000; let y=northing;
+  const south='CDEFGHJKLM'.includes(band); if(south) y-=1e7;
+  const lonOrigin=(zone-1)*6-180+3;
+  const ep2=e2/(1-e2);
+  const M=y/k0;
+  const mu=M/(a*(1-e2/4-3*e2*e2/64-5*e2*e2*e2/256));
+  const phi1=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)+(21*e1*e1/16-55*e1**4/32)*Math.sin(4*mu)+(151*e1**3/96)*Math.sin(6*mu);
+  const N1=a/Math.sqrt(1-e2*Math.sin(phi1)**2);
+  const T1=Math.tan(phi1)**2;
+  const C1=ep2*Math.cos(phi1)**2;
+  const R1=a*(1-e2)/Math.pow(1-e2*Math.sin(phi1)**2,1.5);
+  const D=x/(N1*k0);
+  const lat=phi1-(N1*Math.tan(phi1)/R1)*(D*D/2-(5+3*T1+10*C1-4*C1*C1-9*ep2)*D**4/24+(61+90*T1+298*C1+45*T1*T1-252*ep2-3*C1*C1)*D**6/720);
+  const lon=(D-(1+2*T1+C1)*D**3/6+(5-2*C1+28*T1-3*C1*C1+8*ep2+24*T1*T1)*D**5/120)/Math.cos(phi1);
+  const latD=lat*180/Math.PI, lonD=lonOrigin+lon*180/Math.PI;
+  if(Math.abs(latD)>90||Math.abs(lonD)>180) return null;
+  return {lat:latD,lng:lonD};
+}
+
+/* distance / area / units */
+function haversine(a,b){ return map.distance(a,b); } // meters
+function fmtDist(m){
+  if(settings.units==='imperial'){ const ft=m*3.28084; return ft<1000?`${fmtNum(ft,0)} ft`:`${fmtNum(ft/5280,2)} mi`; }
+  if(settings.units==='nautical'){ return `${fmtNum(m/1852,2)} NM`; }
+  return m<1000?`${fmtNum(m,0)} m`:`${fmtNum(m/1000,2)} km`;
+}
+function fmtArea(m2){
+  if(settings.units==='imperial'){ const sf=m2*10.7639; return sf<2.78e5?`${fmtNum(sf,0)} ft²`:`${fmtNum(m2*3.861e-7,3)} mi²`; }
+  return m2<1e6?`${fmtNum(m2,0)} m²`:`${fmtNum(m2/1e6,3)} km²`;
+}
+function ringAreaM2(latlngs){
+  // spherical excess approximation
+  const R=6378137; let area=0; const n=latlngs.length; if(n<3) return 0;
+  for(let i=0;i<n;i++){
+    const p1=latlngs[i], p2=latlngs[(i+1)%n];
+    area += (p2.lng-p1.lng)*Math.PI/180*(2+Math.sin(p1.lat*Math.PI/180)+Math.sin(p2.lat*Math.PI/180));
+  }
+  return Math.abs(area*R*R/2);
+}
+function polylineLength(latlngs){ let d=0; for(let i=1;i<latlngs.length;i++) d+=map.distance(latlngs[i-1],latlngs[i]); return d; }
+function bearing(a,b){
+  const φ1=a.lat*Math.PI/180,φ2=b.lat*Math.PI/180,Δλ=(b.lng-a.lng)*Math.PI/180;
+  const y=Math.sin(Δλ)*Math.cos(φ2), x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+function destPoint(lat,lng,brgDeg,distM){
+  const R=6378137, δ=distM/R, θ=brgDeg*Math.PI/180, φ1=lat*Math.PI/180, λ1=lng*Math.PI/180;
+  const φ2=Math.asin(Math.sin(φ1)*Math.cos(δ)+Math.cos(φ1)*Math.sin(δ)*Math.cos(θ));
+  const λ2=λ1+Math.atan2(Math.sin(θ)*Math.sin(δ)*Math.cos(φ1),Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
+  return [φ2*180/Math.PI,((λ2*180/Math.PI+540)%360)-180];
+}
+
+/* =================================================================
+   FEATURE MODEL
+   ================================================================= */
+function colorFor(f){
+  if(settings.colorBy==='source') return SOURCE_COLORS[f.source]||'#9ca3af';
+  if(settings.colorBy==='type') return TYPE_COLORS[f.type]||'#9ca3af';
+  return CATEGORY_COLORS[f.category]||'#9ca3af';
+}
+function isVisible(f){
+  if(f.hidden) return false;
+  const F=state.filters;
+  if(F.sources.size && !F.sources.has(f.source)) return false;
+  if(F.cats.size && !F.cats.has(f.category)) return false;
+  if(F.text){
+    const t=F.text.toLowerCase();
+    const hay=`${f.name} ${f.category} ${f.source} ${f.notes} ${Object.values(f.props||{}).join(' ')}`.toLowerCase();
+    if(!hay.includes(t)) return false;
+  }
+  return true;
+}
+
+function makeMarkerIcon(f){
+  const c=colorFor(f);
+  const glyph=CATEGORY_GLYPH[f.category]||'';
+  const sel=state.selection.has(f.id)?' sel':'';
+  return L.divIcon({
+    className:'tac-marker'+sel,
+    html:`<div class="m-dot" style="--c:${c}">${glyph?`<span class="m-glyph">${esc(glyph)}</span>`:''}</div>`,
+    iconSize:[16,16], iconAnchor:[8,8], popupAnchor:[0,-8]
+  });
+}
+function shapeStyle(f){
+  const c=colorFor(f), sel=state.selection.has(f.id);
+  return { color:c, weight:sel?3.5:2, opacity:.95, fillColor:c, fillOpacity:f.type==='line'?0:(sel?.28:.15), dashArray:f.category==='Boundary'?'6 5':null };
+}
+
+function makeLayer(f){
+  let layer;
+  const g=f.geometry;
+  if(f.type==='point'){
+    layer=L.marker([g.coordinates[1],g.coordinates[0]],{icon:makeMarkerIcon(f)});
+  } else if(f.type==='circle'){
+    layer=L.circle([g.coordinates[1],g.coordinates[0]],Object.assign({radius:f.radius||100},shapeStyle(f)));
+  } else if(f.type==='line'){
+    layer=L.polyline(g.coordinates.map(c=>[c[1],c[0]]),shapeStyle(f));
+  } else { // polygon / rectangle
+    layer=L.polygon(g.coordinates[0].map(c=>[c[1],c[0]]),shapeStyle(f));
+  }
+  layer._fid=f.id;
+  layer.on('click',(e)=>{ L.DomEvent.stop(e); onFeatureClick(f.id,e.originalEvent&&e.originalEvent.shiftKey); });
+  bindLabel(f,layer);
+  return layer;
+}
+function bindLabel(f,layer){
+  if(settings.featLabels){
+    layer.bindTooltip(f.name||'(unnamed)',{permanent:true,direction:'top',className:'tac-label',offset:[0,-6]});
+  } else if(layer.getTooltip && layer.getTooltip()){ layer.unbindTooltip(); }
+}
+
+function groupFor(f){ return f.type==='point'?markerGroup:shapeGroup; }
+
+function addFeatureToMap(f){
+  if(!f.layer) f.layer=makeLayer(f);
+  if(isVisible(f)) groupFor(f).addLayer(f.layer);
+}
+function refreshFeatureLayer(f){
+  const wasVis = f.layer && (groupFor(f).hasLayer(f.layer));
+  if(f.layer) groupFor(f).removeLayer(f.layer);
+  f.layer=makeLayer(f);
+  if(isVisible(f)) groupFor(f).addLayer(f.layer);
+}
+
+/* create a feature from a spec */
+function createFeature(spec){
+  const f=Object.assign({
+    id:uid(), name:'', category:settings.defCat, source:'manual',
+    type:'point', notes:'', props:{}, geometry:null, radius:null,
+    backendId:null, createdAt:Date.now()
+  }, spec);
+  if(!f.name) f.name = defaultName(f);
+  state.features.set(f.id,f);
+  addFeatureToMap(f);
+  scheduleSave();
+  return f;
+}
+function defaultName(f){
+  if(f.type==='point'&&f.geometry) return fmtLatLng(f.geometry.coordinates[1],f.geometry.coordinates[0],4);
+  return f.type.charAt(0).toUpperCase()+f.type.slice(1)+' '+(state.features.size+1);
+}
+
+function removeFeature(id){
+  const f=state.features.get(id); if(!f) return;
+  if(f.layer) groupFor(f).removeLayer(f.layer);
+  state.features.delete(id);
+  state.selection.delete(id);
+  if(state.detailId===id){ state.detailId=null; closeDetails(); }
+  scheduleSave(); renderAll();
+}
+
+/* =================================================================
+   SELECTION & CLICK
+   ================================================================= */
+function onFeatureClick(id,additive){
+  if(!additive){ state.selection.clear(); state.selection.add(id); }
+  else { state.selection.has(id)?state.selection.delete(id):state.selection.add(id); }
+  openDetails(id);
+  updateSelectionStyles(); renderList(); updateStatus();
+}
+function updateSelectionStyles(){
+  state.features.forEach(f=>{
+    if(!f.layer) return;
+    if(f.type==='point') f.layer.setIcon(makeMarkerIcon(f));
+    else if(f.layer.setStyle) f.layer.setStyle(shapeStyle(f));
+  });
+  $('#stSel').textContent=state.selection.size;
+  $('#railBadge').textContent=state.selection.size;
+  $('#railBadge').classList.toggle('hide',state.selection.size===0);
+}
+function selectAllShown(){ visibleFeatures().forEach(f=>state.selection.add(f.id)); updateSelectionStyles(); renderList(); updateStatus(); }
+function clearSelection(){ state.selection.clear(); updateSelectionStyles(); renderList(); updateStatus(); }
+
+function visibleFeatures(){ return [...state.features.values()].filter(isVisible); }
+function scopeFeatures(scope){
+  if(scope==='selected') return [...state.selection].map(id=>state.features.get(id)).filter(Boolean);
+  if(scope==='visible') return visibleFeatures();
+  return [...state.features.values()];
+}
+
+/* =================================================================
+   PANEL / VIEW NAV
+   ================================================================= */
+const PANEL_META={
+  data:{t:'DATA & FEATURES'},layers:{t:'BASEMAP & LAYERS'},add:{t:'ADD / DRAW'},
+  osint:{t:'OSINT FEEDS'},connect:{t:'BACKEND LINK'},export:{t:'EXPORT & SYNC'},settings:{t:'SETTINGS'}
+};
+function showPanel(id){
+  state.activePanel=id;
+  $$('#rail .rail-btn').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
+  $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+id));
+  $('#panelTitle').textContent=(PANEL_META[id]||{}).t||id.toUpperCase();
+  const p=$('#panel'); if(p.classList.contains('collapsed')) p.classList.remove('collapsed');
+  if(id==='export') refreshExportScope();
+}
+$$('#rail .rail-btn').forEach(b=>b.addEventListener('click',()=>{
+  if(state.activePanel===b.dataset.panel){ $('#panel').classList.toggle('collapsed'); }
+  else showPanel(b.dataset.panel);
+}));
+$('#panelCollapse').addEventListener('click',()=>$('#panel').classList.add('collapsed'));
+
+/* =================================================================
+   RENDER: feature list, chips, legend, stats
+   ================================================================= */
+function renderAll(){ renderList(); renderChips(); renderLegend(); renderStats(); updateStatus(); refreshExportScope(); }
+
+function renderList(){
+  const host=$('#featList');
+  const feats=[...state.features.values()].sort((a,b)=>b.createdAt-a.createdAt);
+  const shown=feats.filter(isVisible);
+  if(state.features.size===0){
+    host.innerHTML=`<div class="empty"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M12 21s-7-6.5-7-12a7 7 0 0114 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg><div>No features yet.</div><div style="margin-top:4px">Add by address/coordinate, draw on the map, or pull from OSINT / your backend.</div></div>`;
+    return;
+  }
+  if(shown.length===0){ host.innerHTML=`<div class="empty">No features match the current filter.</div>`; return; }
+  host.innerHTML=shown.map(f=>{
+    const c=colorFor(f), sel=state.selection.has(f.id);
+    const sub=`${f.category} · ${f.source.replace('osint:','')} · ${geomLabel(f)}`;
+    return `<div class="feat ${sel?'selected':''} ${f.hidden?'hidden-feat':''}" data-id="${f.id}">
+      <div class="fcheck" data-act="toggle">✓</div>
+      <span class="fdot" style="background:${c}"></span>
+      <div class="fmeta"><div class="fname">${esc(f.name||'(unnamed)')}</div><div class="fsub">${esc(sub)}</div></div>
+      <button class="fvis" data-act="vis" title="Toggle visibility">${f.hidden?eye(false):eye(true)}</button>
+    </div>`;
+  }).join('');
+}
+function eye(on){ return on
+  ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.5"/></svg>`
+  : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3l18 18M10.5 10.6a2 2 0 002.9 2.8M6.5 6.6C3.8 8.2 2 12 2 12s4 7 10 7a9.7 9.7 0 004.5-1.1M9.9 5.2A10.6 10.6 0 0112 5c6 0 10 7 10 7a17 17 0 01-2.2 2.9"/></svg>`; }
+function geomLabel(f){
+  if(f.type==='point') return fmtLatLng(f.geometry.coordinates[1],f.geometry.coordinates[0],3);
+  if(f.type==='circle') return 'r='+fmtDist(f.radius||0);
+  if(f.type==='line'){ const l=polylineLength(f.geometry.coordinates.map(c=>L.latLng(c[1],c[0]))); return fmtDist(l); }
+  const ring=f.geometry.coordinates[0].map(c=>({lat:c[1],lng:c[0]})); return fmtArea(ringAreaM2(ring));
+}
+
+$('#featList').addEventListener('click',e=>{
+  const row=e.target.closest('.feat'); if(!row) return;
+  const id=row.dataset.id, act=e.target.closest('[data-act]');
+  const f=state.features.get(id); if(!f) return;
+  if(act&&act.dataset.act==='toggle'){ state.selection.has(id)?state.selection.delete(id):state.selection.add(id); updateSelectionStyles(); renderList(); updateStatus(); return; }
+  if(act&&act.dataset.act==='vis'){ f.hidden=!f.hidden; refreshFeatureLayer(f); renderList(); scheduleSave(); return; }
+  // row click → focus + select
+  state.selection.clear(); state.selection.add(id);
+  focusFeature(f); openDetails(id); updateSelectionStyles(); renderList(); updateStatus();
+});
+function focusFeature(f){
+  if(f.type==='point'){ map.setView([f.geometry.coordinates[1],f.geometry.coordinates[0]],Math.max(map.getZoom(),14)); }
+  else if(f.layer&&f.layer.getBounds){ map.fitBounds(f.layer.getBounds().pad(.3)); }
+}
+
+function renderChips(){
+  const srcs=[...new Set([...state.features.values()].map(f=>f.source))];
+  const cats=[...new Set([...state.features.values()].map(f=>f.category))];
+  $('#sourceChips').innerHTML=srcs.map(s=>{
+    const on=state.filters.sources.has(s);
+    return `<span class="chip ${on?'on':''}" data-src="${esc(s)}"><span class="cdot" style="background:${SOURCE_COLORS[s]||'#888'}"></span>${esc(s.replace('osint:',''))}</span>`;
+  }).join('');
+  $('#catChips').innerHTML=cats.map(c=>{
+    const on=state.filters.cats.has(c);
+    return `<span class="chip ${on?'on':''}" data-cat="${esc(c)}"><span class="cdot" style="background:${CATEGORY_COLORS[c]||'#888'}"></span>${esc(c)}</span>`;
+  }).join('');
+}
+$('#sourceChips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c)return; const s=c.dataset.src; state.filters.sources.has(s)?state.filters.sources.delete(s):state.filters.sources.add(s); applyFilters(); });
+$('#catChips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c)return; const s=c.dataset.cat; state.filters.cats.has(s)?state.filters.cats.delete(s):state.filters.cats.add(s); applyFilters(); });
+
+function applyFilters(){
+  state.features.forEach(f=>{
+    const vis=isVisible(f), g=groupFor(f), has=g.hasLayer(f.layer);
+    if(vis&&!has) g.addLayer(f.layer);
+    else if(!vis&&has) g.removeLayer(f.layer);
+  });
+  renderChips(); renderList(); refreshExportScope(); updateStatus();
+}
+$('#featFilter').addEventListener('input',e=>{ state.filters.text=e.target.value.trim(); applyFilters(); });
+
+function renderLegend(){
+  const byCat={};
+  state.features.forEach(f=>{ const k = settings.colorBy==='source'?f.source:settings.colorBy==='type'?f.type:f.category; byCat[k]=(byCat[k]||0)+1; });
+  const keys=Object.keys(byCat).sort();
+  $('#legend').innerHTML = keys.length? keys.map(k=>{
+    const color = settings.colorBy==='source'?(SOURCE_COLORS[k]||'#888'):settings.colorBy==='type'?(TYPE_COLORS[k]||'#888'):(CATEGORY_COLORS[k]||'#888');
+    return `<div class="legend-item"><span class="lg" style="background:${color}"></span>${esc(String(k).replace('osint:',''))}<span class="count-tag">${byCat[k]}</span></div>`;
+  }).join('') : `<div class="hint">No features to summarize.</div>`;
+}
+function renderStats(){
+  const total=state.features.size;
+  const pts=[...state.features.values()].filter(f=>f.type==='point').length;
+  const shapes=total-pts;
+  const srcs=new Set([...state.features.values()].map(f=>f.source)).size;
+  $('#statGrid').innerHTML=`
+    <div class="stat-card"><div class="sv">${total}</div><div class="sl">Features</div></div>
+    <div class="stat-card"><div class="sv">${state.selection.size}</div><div class="sl">Selected</div></div>
+    <div class="stat-card"><div class="sv">${pts}</div><div class="sl">Points</div></div>
+    <div class="stat-card"><div class="sv">${shapes}</div><div class="sl">Shapes</div></div>`;
+  $('#featCount').textContent=total;
+}
+
+/* =================================================================
+   DETAILS PANEL
+   ================================================================= */
+function openDetails(id){
+  const f=state.features.get(id); if(!f) return;
+  state.detailId=id;
+  const c=colorFor(f);
+  $('#detDot').style.background=c;
+  $('#detType').textContent=`${f.type} · ${f.source.replace('osint:','')}`;
+  $('#details').classList.add('open');
+  const coords=coordLinesFor(f);
+  const propRows=Object.entries(f.props||{}).map(([k,v])=>propRow(k,v)).join('');
+  const catOptions=Object.keys(CATEGORY_COLORS).map(k=>`<option ${k===f.category?'selected':''}>${k}</option>`).join('');
+  const geomBtn = f.type==='point'
+    ? `<button class="btn sm" data-d="reposition">Reposition</button>`
+    : `<button class="btn sm" data-d="editgeom">Edit geometry</button>`;
+  $('#detBody').innerHTML=`
+    <div class="field"><label>Name / label</label><input class="inp" id="dName" value="${esc(f.name)}"/></div>
+    <div class="row">
+      <div class="field"><label>Category</label><select class="sel" id="dCat">${catOptions}</select></div>
+      <div class="field"><label>Backend ID</label><input class="inp" id="dBid" value="${esc(f.backendId||'')}" placeholder="—"/></div>
+    </div>
+    <div class="kv">${coords}</div>
+    <div class="field"><label>Notes</label><textarea class="ta" id="dNotes" style="min-height:52px">${esc(f.notes||'')}</textarea></div>
+    <div class="sec-t" style="margin-top:6px">Properties</div>
+    <div id="dProps">${propRows||'<div class="hint">No custom properties.</div>'}</div>
+    <button class="btn sm ghost" id="dAddProp" style="margin-top:4px">+ Add property</button>
+    <div class="btnrow" style="margin-top:12px">
+      <button class="btn sm primary" data-d="save">Save</button>
+      <button class="btn sm" data-d="focus">Zoom to</button>
+      ${geomBtn}
+    </div>
+    <div class="btnrow" style="margin-top:8px">
+      <button class="btn sm" data-d="dup">Duplicate</button>
+      <button class="btn sm" data-d="push">Push→BE</button>
+      <button class="btn sm danger" data-d="del">Delete</button>
+    </div>`;
+}
+function coordLinesFor(f){
+  if(f.type==='point'){
+    const lat=f.geometry.coordinates[1],lng=f.geometry.coordinates[0];
+    return `
+      <div class="k">Lat/Lng</div><div class="v copy" data-copy="${lat.toFixed(6)}, ${lng.toFixed(6)}">${fmtLatLng(lat,lng)}</div>
+      <div class="k">MGRS</div><div class="v copy" data-copy="${(toMGRS(lat,lng)||'')}">${fmtMGRS(toMGRS(lat,lng))}</div>
+      <div class="k">UTM</div><div class="v">${fmtUTM(lat,lng)}</div>
+      <div class="k">DMS</div><div class="v">${toDMS(lat,true)} ${toDMS(lng,false)}</div>`;
+  }
+  if(f.type==='circle'){
+    const lat=f.geometry.coordinates[1],lng=f.geometry.coordinates[0];
+    return `<div class="k">Center</div><div class="v copy" data-copy="${lat}, ${lng}">${fmtLatLng(lat,lng)}</div>
+      <div class="k">Radius</div><div class="v">${fmtDist(f.radius||0)}</div>
+      <div class="k">Area</div><div class="v">${fmtArea(Math.PI*(f.radius||0)**2)}</div>`;
+  }
+  if(f.type==='line'){
+    const ll=f.geometry.coordinates.map(c=>L.latLng(c[1],c[0]));
+    return `<div class="k">Vertices</div><div class="v">${ll.length}</div>
+      <div class="k">Length</div><div class="v">${fmtDist(polylineLength(ll))}</div>`;
+  }
+  const ring=f.geometry.coordinates[0].map(c=>({lat:c[1],lng:c[0]}));
+  const cen=f.layer&&f.layer.getBounds?f.layer.getBounds().getCenter():null;
+  return `<div class="k">Vertices</div><div class="v">${ring.length-1}</div>
+    <div class="k">Area</div><div class="v">${fmtArea(ringAreaM2(ring))}</div>
+    ${cen?`<div class="k">Center</div><div class="v copy" data-copy="${cen.lat.toFixed(6)}, ${cen.lng.toFixed(6)}">${fmtLatLng(cen.lat,cen.lng)}</div>`:''}`;
+}
+function propRow(k,v){
+  return `<div class="prop-row"><input class="inp kk" value="${esc(k)}" placeholder="key"/><input class="inp" value="${esc(v)}" placeholder="value"/><button class="btn rm" data-rmprop>✕</button></div>`;
+}
+function closeDetails(){ $('#details').classList.remove('open'); state.detailId=null; }
+$('#detClose').addEventListener('click',closeDetails);
+
+$('#detBody').addEventListener('click',e=>{
+  const copy=e.target.closest('[data-copy]'); if(copy){ copyText(copy.dataset.copy); return; }
+  if(e.target.closest('#dAddProp')){ const d=$('#dProps'); if(d.querySelector('.hint'))d.innerHTML=''; d.insertAdjacentHTML('beforeend',propRow('','')); return; }
+  if(e.target.closest('[data-rmprop]')){ e.target.closest('.prop-row').remove(); return; }
+  const btn=e.target.closest('[data-d]'); if(!btn) return;
+  const f=state.features.get(state.detailId); if(!f) return;
+  const act=btn.dataset.d;
+  if(act==='save') saveDetails(f);
+  else if(act==='focus') focusFeature(f);
+  else if(act==='del'){ if(confirm('Delete this feature?')) removeFeature(state.detailId); }
+  else if(act==='dup') duplicateFeature(f);
+  else if(act==='push') pushFeatures([f]);
+  else if(act==='reposition') repositionPoint(f);
+  else if(act==='editgeom') editGeometry(f);
+});
+function saveDetails(f){
+  f.name=$('#dName').value.trim()||f.name;
+  f.category=$('#dCat').value;
+  f.backendId=$('#dBid').value.trim()||null;
+  f.notes=$('#dNotes').value;
+  const props={};
+  $$('#dProps .prop-row').forEach(r=>{ const k=r.children[0].value.trim(); const v=r.children[1].value; if(k)props[k]=v; });
+  f.props=props;
+  refreshFeatureLayer(f); renderAll(); scheduleSave(); toast('Feature saved',f.name,'ok');
+}
+function duplicateFeature(f){
+  const nf=createFeature({ type:f.type, category:f.category, source:'manual', name:f.name+' (copy)', notes:f.notes, props:Object.assign({},f.props), radius:f.radius, geometry:JSON.parse(JSON.stringify(f.geometry)) });
+  renderAll(); openDetails(nf.id); toast('Duplicated',nf.name,'ok');
+}
+function repositionPoint(f){
+  toast('Reposition','Drag the marker, then click it to confirm.','info');
+  const m=f.layer; m.dragging.enable();
+  m.once('dragend',()=>{
+    const ll=m.getLatLng(); f.geometry.coordinates=[ll.lng,ll.lat];
+    m.dragging.disable(); scheduleSave(); if(state.detailId===f.id)openDetails(f.id); renderList();
+    toast('Moved',f.name,'ok');
+  });
+}
+function editGeometry(f){
+  const l=f.layer;
+  if(!l.editing){ toast('Edit unavailable','This shape type is not editable.','warn'); return; }
+  if(l.editing.enabled()){
+    l.editing.disable(); syncGeometryFromLayer(f);
+    scheduleSave(); if(state.detailId===f.id)openDetails(f.id); renderList();
+    toast('Geometry saved',f.name,'ok');
+  } else {
+    l.editing.enable(); toast('Editing','Drag vertices, then click "Edit geometry" again to save.','info');
+  }
+}
+function syncGeometryFromLayer(f){
+  const l=f.layer;
+  if(f.type==='circle'){ const c=l.getLatLng(); f.geometry.coordinates=[c.lng,c.lat]; f.radius=l.getRadius(); }
+  else if(f.type==='line'){ f.geometry.coordinates=l.getLatLngs().map(p=>[p.lng,p.lat]); }
+  else { const ring=l.getLatLngs()[0].map(p=>[p.lng,p.lat]); ring.push(ring[0]); f.geometry.coordinates=[ring]; }
+}
+
+/* =================================================================
+   DRAW TOOLS
+   ================================================================= */
+function setTool(tool){
+  cancelDraw();
+  state.tool=tool;
+  $$('.maptools .mt').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));
+  $('#stTool').textContent=tool.toUpperCase();
+  $('#mapwrap').style.cursor = (tool==='pan')?'':'crosshair';
+  if(['marker','polyline','polygon','rectangle','circle'].includes(tool)) startDraw(tool);
+  else if(tool==='measure') startMeasure('distance');
+  else if(tool==='measureArea') startMeasure('area');
+}
+function cancelDraw(){
+  if(state.drawHandler){ try{state.drawHandler.disable();}catch(e){} state.drawHandler=null; }
+  clearMeasure();
+}
+function startDraw(kind){
+  const opts={ shapeOptions:{ color:ACCENTS[settings.accent][0], weight:2 } };
+  const H={ marker:L.Draw.Marker, polyline:L.Draw.Polyline, polygon:L.Draw.Polygon, rectangle:L.Draw.Rectangle, circle:L.Draw.Circle }[kind];
+  if(!H) return;
+  state.drawHandler=new H(map, kind==='marker'?{}:opts);
+  state.drawHandler.enable();
+}
+map.on(L.Draw.Event.CREATED, e=>{
+  const layer=e.layer, t=e.layerType;
+  let spec;
+  if(t==='marker'){ const ll=layer.getLatLng(); spec={type:'point',geometry:{type:'Point',coordinates:[ll.lng,ll.lat]}}; }
+  else if(t==='circle'){ const ll=layer.getLatLng(); spec={type:'circle',radius:layer.getRadius(),geometry:{type:'Point',coordinates:[ll.lng,ll.lat]}}; }
+  else if(t==='polyline'){ spec={type:'line',geometry:{type:'LineString',coordinates:layer.getLatLngs().map(p=>[p.lng,p.lat])}}; }
+  else { const ring=layer.getLatLngs()[0].map(p=>[p.lng,p.lat]); ring.push(ring[0]); spec={type:t==='rectangle'?'rectangle':'polygon',geometry:{type:'Polygon',coordinates:[ring]}}; }
+  const f=createFeature(spec);
+  if(settings.revgeo && f.type==='point') reverseGeocode(f);
+  renderAll();
+  // stay in tool for rapid entry unless marker single — re-enable
+  if(state.tool===t || (t==='rectangle'&&state.tool==='rectangle')){ startDraw(state.tool); }
+  toast('Feature added',f.name,'ok');
+});
+
+$$('.maptools .mt').forEach(b=>b.addEventListener('click',()=>{
+  const tool=b.dataset.tool;
+  if(tool==='pick'){ setTool(state.tool==='pick'?'pan':'pick'); return; }
+  setTool(state.tool===tool?'pan':tool);
+}));
+$('#stopDraw').addEventListener('click',()=>setTool('pan'));
+$$('[data-draw]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.draw)));
+
+/* pick coordinate mode + map click */
+map.on('click',e=>{
+  if(state.tool==='pick'){
+    const {lat,lng}=e.latlng;
+    copyText(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    toast('Coordinate copied',`${fmtLatLng(lat,lng)}  ·  ${fmtMGRS(toMGRS(lat,lng))}`,'ok');
+    return;
+  }
+  if(state.tool==='pan'){ /* click empty map → deselect */ if(!e.originalEvent.shiftKey){ clearSelection(); closeDetails(); } }
+});
+
+/* =================================================================
+   MEASURE
+   ================================================================= */
+let measure=null;
+function startMeasure(mode){
+  clearMeasure();
+  measure={mode,pts:[],markers:[],line:null,tip:null};
+  toast('Measure',mode==='area'?'Click to add vertices. Double-click to close area.':'Click to add points. Double-click to finish.','info');
+  map.on('click',measureClick);
+  map.on('dblclick',measureFinish);
+  map.on('mousemove',measureMove);
+  map.doubleClickZoom.disable();
+}
+function measureClick(e){
+  if(!measure) return;
+  measure.pts.push(e.latlng);
+  const m=L.circleMarker(e.latlng,{radius:3,color:ACCENTS[settings.accent][0],fillOpacity:1}).addTo(measureLayer);
+  measure.markers.push(m);
+  redrawMeasure();
+}
+function measureMove(e){
+  if(!measure||!measure.pts.length) return;
+  redrawMeasure(e.latlng);
+}
+function redrawMeasure(hover){
+  if(measure.line) measureLayer.removeLayer(measure.line);
+  const pts=hover?[...measure.pts,hover]:[...measure.pts];
+  const closed=measure.mode==='area';
+  measure.line=(closed?L.polygon(pts,{color:ACCENTS[settings.accent][0],weight:2,dashArray:'5 5',fillOpacity:.1}):L.polyline(pts,{color:ACCENTS[settings.accent][0],weight:2,dashArray:'5 5'})).addTo(measureLayer);
+  let label='';
+  if(closed && pts.length>=3){ label='Area: '+fmtArea(ringAreaM2(pts.map(p=>({lat:p.lat,lng:p.lng})))); }
+  else if(pts.length>=2){ const d=polylineLength(pts); const brg=bearing(pts[pts.length-2],pts[pts.length-1]); label='Dist: '+fmtDist(d)+'  ·  Brg: '+brg.toFixed(0)+'°'; }
+  if(label){
+    if(!measure.tip){ measure.tip=L.tooltip({permanent:true,direction:'top',className:'tac-label'}); }
+    measure.tip.setLatLng(pts[pts.length-1]).setContent(label);
+    if(!measureLayer.hasLayer(measure.tip)) measure.tip.addTo(measureLayer);
+  }
+}
+function measureFinish(e){
+  if(!measure) return;
+  L.DomEvent.stop(e);
+  if(measure.pts.length<2){ clearMeasure(); return; }
+  const asFeature=confirm('Save this measurement as a feature?');
+  if(asFeature){
+    if(measure.mode==='area'){
+      const ring=measure.pts.map(p=>[p.lng,p.lat]); ring.push(ring[0]);
+      createFeature({type:'polygon',category:'Boundary',source:'manual',name:'Measured area',geometry:{type:'Polygon',coordinates:[ring]}});
+    } else {
+      createFeature({type:'line',category:'Waypoint',source:'manual',name:'Measured route',geometry:{type:'LineString',coordinates:measure.pts.map(p=>[p.lng,p.lat])}});
+    }
+    renderAll();
+  }
+  clearMeasure(); setTool('pan');
+}
+function clearMeasure(){
+  if(measure){ map.off('click',measureClick); map.off('dblclick',measureFinish); map.off('mousemove',measureMove); map.doubleClickZoom.enable(); }
+  measureLayer.clearLayers(); measure=null;
+}
+
+/* =================================================================
+   GEOCODING (Nominatim) + SEARCH
+   ================================================================= */
+async function geocode(q,limit=6){
+  const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=${limit}&q=${encodeURIComponent(q)}`;
+  const r=await fetch(url,{headers:{'Accept':'application/json'}});
+  if(!r.ok) throw new Error('Geocoder '+r.status);
+  return r.json();
+}
+async function reverseGeocode(f){
+  try{
+    const lat=f.geometry.coordinates[1],lng=f.geometry.coordinates[0];
+    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+    const j=await r.json();
+    if(j&&j.display_name){ f.name=j.display_name.split(',').slice(0,2).join(',').trim(); f.props.address=j.display_name; refreshFeatureLayer(f); renderList(); if(state.detailId===f.id)openDetails(f.id); scheduleSave(); }
+  }catch(e){}
+}
+
+/* top search: debounce + dropdown */
+let searchTimer=null, searchActive=-1, searchItems=[];
+const gSearch=$('#globalSearch'), sResults=$('#searchResults');
+gSearch.addEventListener('input',()=>{
+  clearTimeout(searchTimer);
+  const q=gSearch.value.trim();
+  if(q.length<3){ sResults.classList.remove('open'); return; }
+  // instant coordinate parse
+  const loc=parseLocation(q);
+  searchTimer=setTimeout(()=>runSearch(q,loc),350);
+});
+gSearch.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    const loc=parseLocation(gSearch.value.trim());
+    if(searchActive>=0&&searchItems[searchActive]){ pickSearch(searchItems[searchActive]); }
+    else if(loc){ gotoLoc(loc); }
+    else runSearch(gSearch.value.trim(),null,true);
+  } else if(e.key==='ArrowDown'){ searchActive=clamp(searchActive+1,0,searchItems.length-1); paintSearchActive(); e.preventDefault(); }
+  else if(e.key==='ArrowUp'){ searchActive=clamp(searchActive-1,0,searchItems.length-1); paintSearchActive(); e.preventDefault(); }
+  else if(e.key==='Escape'){ sResults.classList.remove('open'); }
+});
+async function runSearch(q,loc,pickFirst){
+  const rows=[];
+  if(loc) rows.push({coord:true,loc,title:'Go to coordinate',sub:fmtCoord(loc.lat,loc.lng)});
+  try{
+    const res=await geocode(q,6);
+    res.forEach(r=>rows.push({title:r.display_name.split(',')[0],sub:r.display_name,lat:+r.lat,lng:+r.lon,raw:r}));
+  }catch(e){ toast('Search failed',e.message,'err'); }
+  searchItems=rows; searchActive=rows.length?0:-1;
+  sResults.innerHTML=rows.length? rows.map((r,i)=>`
+    <div class="sr-item ${i===0?'active':''}" data-i="${i}">
+      <span class="sr-ic">${r.coord?'◎':'📍'}</span>
+      <div><div class="sr-t">${esc(r.title)}</div><div class="sr-s">${esc(r.sub)}</div></div>
+    </div>`).join('') : `<div class="sr-item"><div class="sr-s">No results.</div></div>`;
+  sResults.classList.add('open');
+  if(pickFirst&&rows.length) pickSearch(rows[0]);
+}
+function paintSearchActive(){ $$('#searchResults .sr-item').forEach((el,i)=>el.classList.toggle('active',i===searchActive)); }
+sResults.addEventListener('click',e=>{ const it=e.target.closest('.sr-item'); if(!it||it.dataset.i==null) return; pickSearch(searchItems[+it.dataset.i]); });
+function pickSearch(r){
+  sResults.classList.remove('open');
+  if(r.coord){ gotoLoc(r.loc); return; }
+  map.setView([r.lat,r.lng],14);
+  // offer to add
+  const f=createFeature({type:'point',category:settings.defCat,source:'manual',name:r.title,props:{address:r.sub},geometry:{type:'Point',coordinates:[r.lng,r.lat]}});
+  renderAll(); openDetails(f.id);
+  toast('Placed',r.title,'ok');
+}
+function gotoLoc(loc){ map.setView([loc.lat,loc.lng],Math.max(map.getZoom(),13)); toast('Located',fmtCoord(loc.lat,loc.lng),'info'); sResults.classList.remove('open'); }
+document.addEventListener('click',e=>{ if(!e.target.closest('.topsearch')) sResults.classList.remove('open'); });
+
+/* add-by panels */
+$('#addrGeocode').addEventListener('click',async()=>{
+  const q=$('#addrInput').value.trim(); if(!q) return;
+  try{ const res=await geocode(q,1); if(!res.length){ toast('No match',q,'warn'); return; }
+    const r=res[0]; map.setView([+r.lat,+r.lon],15);
+    const f=createFeature({type:'point',category:$('#defCat').value,source:'manual',name:r.display_name.split(',')[0],props:{address:r.display_name},geometry:{type:'Point',coordinates:[+r.lon,+r.lat]}});
+    renderAll(); openDetails(f.id); toast('Geocoded',f.name,'ok'); $('#addrInput').value='';
+  }catch(e){ toast('Geocode failed',e.message,'err'); }
+});
+$('#coordPlace').addEventListener('click',()=>{
+  const loc=parseLocation($('#coordInput').value.trim());
+  if(!loc){ toast('Invalid coordinate','Try "38.89, -77.03", MGRS, or UTM.','err'); return; }
+  map.setView([loc.lat,loc.lng],Math.max(map.getZoom(),13));
+  const f=createFeature({type:'point',category:$('#defCat').value,source:'manual',geometry:{type:'Point',coordinates:[loc.lng,loc.lat]}});
+  renderAll(); openDetails(f.id); $('#coordInput').value=''; toast('Point placed',f.name,'ok');
+});
+
+/* =================================================================
+   OSINT FEEDS
+   ================================================================= */
+function bounds4(){ const b=map.getBounds(); return {s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()}; }
+
+async function osintOverpass(){
+  const sel=$('#ovpPreset').value;
+  let kv = sel==='__custom' ? $('#ovpCustom').value.trim() : sel;
+  if(!kv){ toast('Overpass','Enter a key=value.','warn'); return; }
+  const b=bounds4(); const bbox=`${b.s},${b.w},${b.n},${b.e}`;
+  let filter;
+  if(kv.includes('=*')){ const k=kv.split('=')[0]; filter=`["${k}"]`; }
+  else { const [k,v]=kv.split('='); filter=`["${k}"="${v}"]`; }
+  const query=`[out:json][timeout:25];(node${filter}(${bbox});way${filter}(${bbox});relation${filter}(${bbox}););out center 300;`;
+  const btn=$('#ovpRun'); loadBtn(btn,true);
+  try{
+    const r=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
+    const j=await r.json();
+    let n=0;
+    (j.elements||[]).forEach(el=>{
+      const lat=el.lat||(el.center&&el.center.lat), lng=el.lon||(el.center&&el.center.lon);
+      if(lat==null) return;
+      const tags=el.tags||{};
+      createFeature({type:'point',category:'Facility',source:'osint:overpass',
+        name:tags.name||kv,props:Object.assign({osm_id:el.type+'/'+el.id},tags),
+        geometry:{type:'Point',coordinates:[lng,lat]}});
+      n++;
+    });
+    renderAll(); toast('Overpass',`Loaded ${n} feature(s) for ${kv}.`,n?'ok':'warn');
+  }catch(e){ toast('Overpass failed',e.message,'err'); }
+  loadBtn(btn,false);
+}
+$('#ovpRun').addEventListener('click',osintOverpass);
+$('#ovpPreset').addEventListener('change',e=>$('#ovpCustomWrap').classList.toggle('hide',e.target.value!=='__custom'));
+
+async function osintUSGS(){
+  const feed=$('#usgsFeed').value; const btn=$('#usgsRun'); loadBtn(btn,true);
+  try{
+    const r=await fetch(`https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/${feed}.geojson`);
+    const j=await r.json(); let n=0;
+    (j.features||[]).forEach(ft=>{
+      const c=ft.geometry.coordinates, p=ft.properties;
+      createFeature({type:'point',category:'Seismic',source:'osint:usgs',
+        name:`M${p.mag} ${p.place||''}`.trim(),
+        props:{magnitude:p.mag,place:p.place,time:new Date(p.time).toISOString(),depth_km:c[2],url:p.url,felt:p.felt,tsunami:p.tsunami},
+        geometry:{type:'Point',coordinates:[c[0],c[1]]}});
+      n++;
+    });
+    renderAll(); toast('USGS',`Loaded ${n} earthquake(s).`,'ok');
+  }catch(e){ toast('USGS failed',e.message,'err'); }
+  loadBtn(btn,false);
+}
+$('#usgsRun').addEventListener('click',osintUSGS);
+
+async function osintNWS(){
+  const btn=$('#nwsRun'); loadBtn(btn,true);
+  try{
+    const r=await fetch('https://api.weather.gov/alerts/active?status=actual&limit=500',{headers:{'Accept':'application/geo+json'}});
+    const j=await r.json(); let n=0,skipped=0;
+    (j.features||[]).forEach(ft=>{
+      const p=ft.properties;
+      if(!ft.geometry){ skipped++; return; }
+      const g=ft.geometry;
+      if(g.type==='Polygon'){
+        createFeature({type:'polygon',category:'Alert',source:'osint:nws',name:p.event||'Alert',
+          props:{severity:p.severity,urgency:p.urgency,area:p.areaDesc,headline:p.headline,expires:p.expires},
+          geometry:g});
+      } else if(g.type==='MultiPolygon'){
+        g.coordinates.forEach(poly=>createFeature({type:'polygon',category:'Alert',source:'osint:nws',name:p.event||'Alert',
+          props:{severity:p.severity,area:p.areaDesc,headline:p.headline,expires:p.expires},geometry:{type:'Polygon',coordinates:poly}}));
+      }
+      n++;
+    });
+    renderAll(); toast('NWS Alerts',`Loaded ${n} alert(s)${skipped?`, ${skipped} zone-only skipped`:''}.`,'ok');
+  }catch(e){ toast('NWS failed',e.message,'err'); }
+  loadBtn(btn,false);
+}
+$('#nwsRun').addEventListener('click',osintNWS);
+
+async function osintWiki(){
+  const c=map.getCenter(); const btn=$('#wikiRun'); loadBtn(btn,true);
+  try{
+    const url=`https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${c.lat}|${c.lng}&gsradius=10000&gslimit=50&format=json&origin=*`;
+    const r=await fetch(url); const j=await r.json(); let n=0;
+    ((j.query&&j.query.geosearch)||[]).forEach(a=>{
+      createFeature({type:'point',category:'Reference',source:'osint:wikipedia',name:a.title,
+        props:{pageid:a.pageid,dist_m:a.dist,url:'https://en.wikipedia.org/?curid='+a.pageid},
+        geometry:{type:'Point',coordinates:[a.lon,a.lat]}});
+      n++;
+    });
+    renderAll(); toast('Wikipedia',`Loaded ${n} article(s).`,'ok');
+  }catch(e){ toast('Wikipedia failed',e.message,'err'); }
+  loadBtn(btn,false);
+}
+$('#wikiRun').addEventListener('click',osintWiki);
+
+async function loadGeojsonUrl(){
+  const url=$('#geojsonUrl').value.trim(); if(!url) return;
+  const name=$('#geojsonUrlName').value.trim();
+  const btn=$('#geojsonUrlRun'); loadBtn(btn,true);
+  try{
+    const r=await fetch(url); const j=await r.json();
+    const n=ingestGeoJSON(j,'osint:geojson',name);
+    renderAll(); toast('GeoJSON',`Loaded ${n} feature(s).`,'ok');
+  }catch(e){ toast('Fetch failed',e.message,'err'); }
+  loadBtn(btn,false);
+}
+$('#geojsonUrlRun').addEventListener('click',loadGeojsonUrl);
+function loadBtn(btn,on){ if(!btn)return; if(on){ btn.dataset.txt=btn.innerHTML; btn.innerHTML='<span class="loading-spin"></span>'; btn.disabled=true; } else { btn.innerHTML=btn.dataset.txt||btn.innerHTML; btn.disabled=false; } }
+
+/* =================================================================
+   GEOJSON INGEST / EXPORT
+   ================================================================= */
+function ingestGeoJSON(obj,source='import',srcName){
+  source = srcName ? source : source;
+  let feats=[];
+  if(obj.type==='FeatureCollection') feats=obj.features||[];
+  else if(obj.type==='Feature') feats=[obj];
+  else if(Array.isArray(obj)) feats=obj;
+  else if(obj.geometry) feats=[obj];
+  let n=0;
+  feats.forEach(ft=>{
+    const g=ft.geometry||ft; if(!g||!g.type) return;
+    const props=ft.properties||ft.props||{};
+    const name=props.name||props.title||props.NAME||props.label||'';
+    const cat=props.category||props.cat|| guessCat(source);
+    const explode=(geom)=>{
+      if(geom.type==='Point'){ mk('point',{type:'Point',coordinates:geom.coordinates},null); }
+      else if(geom.type==='LineString'){ mk('line',geom,null); }
+      else if(geom.type==='Polygon'){ mk('polygon',geom,null); }
+      else if(geom.type==='MultiPoint'){ geom.coordinates.forEach(c=>mk('point',{type:'Point',coordinates:c},null)); }
+      else if(geom.type==='MultiLineString'){ geom.coordinates.forEach(c=>mk('line',{type:'LineString',coordinates:c},null)); }
+      else if(geom.type==='MultiPolygon'){ geom.coordinates.forEach(c=>mk('polygon',{type:'Polygon',coordinates:c},null)); }
+      else if(geom.type==='GeometryCollection'){ (geom.geometries||[]).forEach(explode); }
+    };
+    const mk=(type,geometry,rad)=>{
+      const isCircle = props.radius||props.radius_m;
+      createFeature({
+        type:isCircle&&type==='point'?'circle':type,
+        radius:isCircle?(+props.radius_m||+props.radius):null,
+        category:cat, source:srcName?source:source, name, props,
+        backendId:props[state.backend.cfg.idField]||props.id||null,
+        geometry
+      });
+      n++;
+    };
+    explode(g);
+  });
+  return n;
+}
+function guessCat(source){
+  if(source.includes('usgs')) return 'Seismic';
+  if(source.includes('nws')) return 'Alert';
+  if(source.includes('wikipedia')) return 'Reference';
+  if(source==='backend') return 'Asset';
+  return 'POI';
+}
+function featureToGeoJSON(f){
+  let geometry=f.geometry;
+  if(f.type==='circle'){
+    if(settings.circlePoly){
+      const lat=f.geometry.coordinates[1],lng=f.geometry.coordinates[0], r=f.radius||0, pts=[];
+      for(let i=0;i<=64;i++){ const p=destPoint(lat,lng,i*360/64,r); pts.push([p[1],p[0]]); }
+      geometry={type:'Polygon',coordinates:[pts]};
+    } else {
+      geometry={type:'Point',coordinates:f.geometry.coordinates};
+    }
+  }
+  const props=Object.assign({},f.props,{ name:f.name, category:f.category, source:f.source, _atlasType:f.type });
+  if(f.type==='circle') props.radius_m=f.radius;
+  if(f.notes) props.notes=f.notes;
+  const gj={type:'Feature',geometry,properties:props};
+  if(f.backendId!=null) gj.id=f.backendId;
+  return gj;
+}
+function exportCollection(scope){
+  const feats=scopeFeatures(scope).map(featureToGeoJSON);
+  return {type:'FeatureCollection',features:feats,metadata:{generated:new Date().toISOString(),tool:'ATLAS',count:feats.length}};
+}
+
+/* export UI */
+function refreshExportScope(){
+  const scope=$('#expScope').value;
+  const n=scopeFeatures(scope).length;
+  $('#expScopeInfo').textContent=`${n} feature(s) in scope.`;
+}
+$('#expScope').addEventListener('change',refreshExportScope);
+$('#expBuild').addEventListener('click',()=>{ $('#expText').value=JSON.stringify(exportCollection($('#expScope').value),null,2); });
+$('#expCopy').addEventListener('click',()=>{ const t=$('#expText').value||JSON.stringify(exportCollection($('#expScope').value)); copyText(t); toast('Copied','GeoJSON on clipboard','ok'); });
+$('#expDownload').addEventListener('click',()=>{ download('atlas-export-'+Date.now()+'.geojson',$('#expText').value||JSON.stringify(exportCollection($('#expScope').value),null,2)); });
+
+/* =================================================================
+   BACKEND CONNECTOR
+   ================================================================= */
+function beCfgFromUI(){
+  const c=state.backend.cfg;
+  c.base=$('#beBase').value.trim(); c.fetch=$('#beFetch').value.trim(); c.create=$('#beCreate').value.trim();
+  c.update=$('#beUpdate').value.trim(); c.authName=$('#beAuthName').value.trim(); c.authVal=$('#beAuthVal').value.trim();
+  c.idField=$('#beIdField').value.trim()||'id'; c.arrPath=$('#beArrPath').value.trim();
+  saveJSON(BACKEND_KEY,c);
+  return c;
+}
+function beHeaders(json){
+  const c=state.backend.cfg, h={};
+  if(json) h['Content-Type']='application/json';
+  if(c.authName&&c.authVal) h[c.authName]=c.authVal;
+  return h;
+}
+function beLog(msg,cls){ const el=$('#beLog'); const t=new Date().toLocaleTimeString(); el.innerHTML+=`<div style="color:${cls==='err'?'var(--danger)':cls==='ok'?'var(--ok)':'var(--text-2)'}">[${t}] ${esc(msg)}</div>`; el.scrollTop=el.scrollHeight; }
+function setBackendStatus(online){
+  state.backend.online=online;
+  $('#beDot').className='dot '+(online?'on pulse':'off');
+  $('#beLabel').textContent=online?'BACKEND ON':'BACKEND OFF';
+  $('#stBE').textContent=online?'ONLINE':'OFFLINE';
+}
+async function beTest(){
+  const c=beCfgFromUI(); if(!c.base){ toast('Backend','Enter a base URL.','warn'); return; }
+  beLog('Testing '+c.base+(c.fetch||''));
+  try{
+    const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),8000);
+    const r=await fetch(c.base+(c.fetch||''),{headers:beHeaders(),signal:ctrl.signal});
+    clearTimeout(to);
+    setBackendStatus(r.ok);
+    beLog('Response '+r.status+' '+r.statusText, r.ok?'ok':'err');
+    toast('Backend',r.ok?'Link established ('+r.status+')':'Reachable but '+r.status,r.ok?'ok':'warn');
+    if(r.ok && settings.autoload) beLoad();
+  }catch(e){ setBackendStatus(false); beLog('Error: '+e.message,'err'); toast('Backend unreachable',e.message,'err'); }
+}
+async function beLoad(){
+  const c=beCfgFromUI(); if(!c.base){ toast('Backend','Enter a base URL.','warn'); return; }
+  beLog('Fetching records…');
+  try{
+    const r=await fetch(c.base+(c.fetch||''),{headers:beHeaders()});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    let j=await r.json();
+    if(c.arrPath){ c.arrPath.split('.').forEach(k=>{ j=j?j[k]:null; }); }
+    const n=ingestGeoJSON(j,'backend');
+    setBackendStatus(true);
+    beLog('Loaded '+n+' record(s).','ok'); renderAll();
+    toast('Backend',`Loaded ${n} record(s).`,'ok');
+  }catch(e){ beLog('Load failed: '+e.message,'err'); toast('Load failed',e.message,'err'); }
+}
+async function pushFeatures(feats){
+  const c=beCfgFromUI(); if(!c.base){ toast('Backend','Configure the backend link first.','warn'); showPanel('connect'); return; }
+  let created=0,updated=0,failed=0;
+  for(const f of feats){
+    const body=JSON.stringify(featureToGeoJSON(f));
+    try{
+      let url,method;
+      if(f.backendId){ url=c.base+(c.update||'/').replace(':id',encodeURIComponent(f.backendId)); method='PUT'; }
+      else { url=c.base+(c.create||'/'); method='POST'; }
+      const r=await fetch(url,{method,headers:beHeaders(true),body});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      let resp=null; try{ resp=await r.json(); }catch(e){}
+      if(!f.backendId){ created++; if(resp&&resp[c.idField]!=null){ f.backendId=resp[c.idField]; } }
+      else updated++;
+      beLog(`${method} ${f.name} → ${r.status}`,'ok');
+    }catch(e){ failed++; beLog(`Push ${f.name} failed: ${e.message}`,'err'); }
+  }
+  scheduleSave(); renderAll();
+  toast('Push complete',`${created} created · ${updated} updated${failed?` · ${failed} failed`:''}`,failed?'warn':'ok');
+}
+$('#beTest').addEventListener('click',beTest);
+$('#beLoad').addEventListener('click',beLoad);
+$('#bePush').addEventListener('click',()=>{
+  const feats=scopeFeatures($('#expScope').value);
+  if(!feats.length){ toast('Nothing to push','Select or widen scope first.','warn'); return; }
+  if(confirm(`Push ${feats.length} feature(s) to backend?`)) pushFeatures(feats);
+});
+
+/* =================================================================
+   PROJECT SAVE / LOAD / IMPORT
+   ================================================================= */
+function serializeProject(){
+  return {
+    v:1, savedAt:new Date().toISOString(),
+    view:{center:[map.getCenter().lat,map.getCenter().lng],zoom:map.getZoom(),basemap:settings.basemap},
+    settings, backend:state.backend.cfg,
+    features:[...state.features.values()].map(f=>({id:f.id,name:f.name,category:f.category,source:f.source,type:f.type,notes:f.notes,props:f.props,geometry:f.geometry,radius:f.radius,backendId:f.backendId,hidden:!!f.hidden,createdAt:f.createdAt}))
+  };
+}
+function loadProject(p,replace=true){
+  if(replace) clearAllFeatures();
+  if(p.settings) Object.assign(settings,p.settings);
+  if(p.backend) Object.assign(state.backend.cfg,p.backend);
+  (p.features||[]).forEach(fd=>{
+    const f=Object.assign({props:{},layer:null},fd);
+    state.features.set(f.id,f); addFeatureToMap(f);
+  });
+  if(p.view){ try{ map.setView(p.view.center,p.view.zoom); if(p.view.basemap) setBasemap(p.view.basemap); }catch(e){} }
+  syncSettingsToUI(); renderAll();
+}
+let saveTimer=null;
+function scheduleSave(){ if(!settings.autosave) return; clearTimeout(saveTimer); saveTimer=setTimeout(()=>saveJSON(PROJECT_KEY,serializeProject()),600); }
+function clearAllFeatures(){ state.features.forEach(f=>{ if(f.layer) groupFor(f).removeLayer(f.layer); }); state.features.clear(); state.selection.clear(); }
+
+$('#prjSave').addEventListener('click',()=>{ saveJSON(PROJECT_KEY,serializeProject()); toast('Saved','Workspace stored locally','ok'); });
+$('#prjLoad').addEventListener('click',()=>{ const p=loadJSON(PROJECT_KEY,null); if(!p){ toast('No saved project','','warn'); return; } loadProject(p); toast('Restored',`${(p.features||[]).length} feature(s)`,'ok'); });
+$('#prjExport').addEventListener('click',()=>download('atlas-project-'+Date.now()+'.json',JSON.stringify(serializeProject(),null,2)));
+$('#prjImport').addEventListener('click',()=>{ fileMode='project'; $('#fileInput').click(); });
+$('#importGeojsonBtn').addEventListener('click',()=>{ fileMode='geojson'; $('#fileInput').click(); });
+$('#clearAll').addEventListener('click',()=>{ if(confirm('Remove ALL features from the workspace?')){ clearAllFeatures(); renderAll(); closeDetails(); scheduleSave(); toast('Cleared','','ok'); } });
+
+let fileMode='geojson';
+$('#fileInput').addEventListener('change',e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const obj=JSON.parse(rd.result);
+      if(fileMode==='project'||obj.features&&obj.settings&&obj.v){ loadProject(obj); toast('Project imported','','ok'); }
+      else { const n=ingestGeoJSON(obj,'import'); renderAll(); toast('Imported',`${n} feature(s)`,'ok'); }
+    }catch(err){ toast('Import failed',err.message,'err'); }
+  };
+  rd.readAsText(file); e.target.value='';
+});
+
+/* =================================================================
+   GRATICULE
+   ================================================================= */
+function gratStep(z){ return z<3?30:z<5?10:z<7?5:z<8?2:z<10?1:z<12?.5:z<14?.1:.05; }
+function drawGraticule(){
+  graticuleLayer.clearLayers();
+  if(!settings.graticule) return;
+  const b=map.getBounds(), step=gratStep(map.getZoom());
+  const style={color:'#2a4056',weight:.6,opacity:.55,interactive:false};
+  let west=Math.floor(b.getWest()/step)*step;
+  for(let x=west;x<=b.getEast()+step;x+=step){
+    L.polyline([[b.getSouth(),x],[b.getNorth(),x]],style).addTo(graticuleLayer);
+    L.marker([b.getSouth(),x],{interactive:false,icon:L.divIcon({className:'grat-label',html:x.toFixed(step<1?2:0)+'°',iconSize:[40,12]})}).addTo(graticuleLayer);
+  }
+  let south=Math.floor(b.getSouth()/step)*step;
+  for(let y=south;y<=b.getNorth()+step;y+=step){
+    L.polyline([[y,b.getWest()],[y,b.getEast()]],style).addTo(graticuleLayer);
+    L.marker([y,b.getWest()],{interactive:false,icon:L.divIcon({className:'grat-label',html:y.toFixed(step<1?2:0)+'°',iconSize:[40,12]})}).addTo(graticuleLayer);
+  }
+}
+
+/* =================================================================
+   STATUS BAR / CURSOR
+   ================================================================= */
+function updateStatus(){
+  $('#stZoom').textContent=map.getZoom();
+  $('#stSel').textContent=state.selection.size;
+  $('#featCount').textContent=state.features.size;
+}
+map.on('mousemove',e=>{
+  const {lat,lng}=e.latlng;
+  $('#stLL').textContent=fmtLatLng(lat,lng);
+  $('#stMgrs').textContent=fmtMGRS(toMGRS(lat,lng));
+});
+map.on('zoomend moveend',()=>{ $('#stZoom').textContent=map.getZoom(); drawGraticule(); updateScaleReadout(); });
+function updateScaleReadout(){
+  const c=map.getCenter(), z=map.getZoom();
+  const mpp=40075016.686*Math.abs(Math.cos(c.lat*Math.PI/180))/Math.pow(2,z+8);
+  $('#stScale').textContent=fmtDist(mpp*120).replace(/\s/,' ')+'/px⁻¹';
+  $('#stScale').textContent='1:'+fmtNum(mpp*96*39.37,0);
+}
+$('#sbLatLng').addEventListener('click',()=>{ copyText($('#stLL').textContent); toast('Copied',$('#stLL').textContent,'ok'); });
+$('#sbMgrs').addEventListener('click',()=>{ copyText($('#stMgrs').textContent); toast('Copied',$('#stMgrs').textContent,'ok'); });
+
+/* =================================================================
+   CONTEXT MENU (right-click on map)
+   ================================================================= */
+const ctx=$('#ctxmenu');
+map.on('contextmenu',e=>{
+  const {lat,lng}=e.latlng;
+  ctx.innerHTML=`
+    <div class="ctx-coords"><div class="c1">${fmtLatLng(lat,lng)}</div><div>${fmtMGRS(toMGRS(lat,lng))}</div></div>
+    <div class="ctx-i" data-cx="add"><span class="cxi">📍</span>Add point here</div>
+    <div class="ctx-i" data-cx="addcat"><span class="cxi">⊕</span>Add point (choose category)</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-i" data-cx="cll"><span class="cxi">⧉</span>Copy Lat/Lng</div>
+    <div class="ctx-i" data-cx="cmgrs"><span class="cxi">⧉</span>Copy MGRS</div>
+    <div class="ctx-i" data-cx="cutm"><span class="cxi">⧉</span>Copy UTM</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-i" data-cx="center"><span class="cxi">◎</span>Center here</div>
+    <div class="ctx-i" data-cx="meashere"><span class="cxi">📐</span>Measure from here</div>`;
+  ctx.dataset.lat=lat; ctx.dataset.lng=lng;
+  const px=e.originalEvent.clientX, py=e.originalEvent.clientY;
+  ctx.style.display='block';
+  ctx.style.left=Math.min(px,window.innerWidth-230)+'px';
+  ctx.style.top=Math.min(py,window.innerHeight-260)+'px';
+});
+ctx.addEventListener('click',e=>{
+  const it=e.target.closest('.ctx-i'); if(!it) return;
+  const lat=+ctx.dataset.lat,lng=+ctx.dataset.lng, act=it.dataset.cx;
+  ctx.style.display='none';
+  if(act==='add'){ const f=createFeature({type:'point',geometry:{type:'Point',coordinates:[lng,lat]}}); renderAll(); openDetails(f.id); if(settings.revgeo)reverseGeocode(f); }
+  else if(act==='addcat'){ chooseCategory(cat=>{ const f=createFeature({type:'point',category:cat,geometry:{type:'Point',coordinates:[lng,lat]}}); renderAll(); openDetails(f.id); }); }
+  else if(act==='cll'){ copyText(`${lat.toFixed(6)}, ${lng.toFixed(6)}`); toast('Copied','Lat/Lng','ok'); }
+  else if(act==='cmgrs'){ copyText(toMGRS(lat,lng)||''); toast('Copied','MGRS','ok'); }
+  else if(act==='cutm'){ copyText(fmtUTM(lat,lng)); toast('Copied','UTM','ok'); }
+  else if(act==='center'){ map.panTo([lat,lng]); }
+  else if(act==='meashere'){ setTool('measure'); setTimeout(()=>{ if(measure){ measure.pts.push(L.latLng(lat,lng)); L.circleMarker([lat,lng],{radius:3,color:ACCENTS[settings.accent][0],fillOpacity:1}).addTo(measureLayer); redrawMeasure(); } },50); }
+});
+document.addEventListener('click',()=>ctx.style.display='none');
+document.addEventListener('scroll',()=>ctx.style.display='none',true);
+
+/* =================================================================
+   MODAL + CATEGORY CHOOSER + HELP
+   ================================================================= */
+function modal(title,bodyHTML,footHTML){
+  $('#modalTitle').textContent=title; $('#modalBody').innerHTML=bodyHTML; $('#modalFoot').innerHTML=footHTML||'';
+  $('#modalOverlay').classList.add('open');
+}
+function closeModal(){ $('#modalOverlay').classList.remove('open'); }
+$('#modalX').addEventListener('click',closeModal);
+$('#modalOverlay').addEventListener('click',e=>{ if(e.target.id==='modalOverlay') closeModal(); });
+
+function chooseCategory(cb){
+  const opts=Object.keys(CATEGORY_COLORS).map(k=>`<button class="btn sm" data-cat="${k}" style="border-color:${CATEGORY_COLORS[k]}40"><span style="width:8px;height:8px;border-radius:2px;background:${CATEGORY_COLORS[k]};display:inline-block;margin-right:6px"></span>${k}</button>`).join('');
+  modal('Select category',`<div class="btnrow" style="gap:6px">${opts}</div>`);
+  $('#modalBody').addEventListener('click',function h(e){ const b=e.target.closest('[data-cat]'); if(!b)return; closeModal(); cb(b.dataset.cat); },{once:true});
+}
+$('#btnHelp').addEventListener('click',showHelp);
+function showHelp(){
+  modal('ATLAS — Help & Shortcuts',`
+    <div style="line-height:1.7;font-size:12.5px">
+    <p><b>ATLAS</b> is an all-in-one operational map console. Everything runs client-side.</p>
+    <div class="sec-t" style="margin-top:10px">Keyboard</div>
+    <div class="kv" style="grid-template-columns:120px 1fr">
+      <div class="k">Ctrl/⌘ K</div><div class="v">Command palette</div>
+      <div class="k">/</div><div class="v">Focus search</div>
+      <div class="k">M / L / P</div><div class="v">Point / Line / Polygon</div>
+      <div class="k">R / C</div><div class="v">Rectangle / Circle</div>
+      <div class="k">D / A</div><div class="v">Measure distance / area</div>
+      <div class="k">F</div><div class="v">Fit all features</div>
+      <div class="k">G</div><div class="v">Toggle graticule</div>
+      <div class="k">\\</div><div class="v">Collapse side panel</div>
+      <div class="k">Esc</div><div class="v">Cancel tool / close</div>
+      <div class="k">Del</div><div class="v">Delete selected</div>
+    </div>
+    <div class="sec-t" style="margin-top:10px">Workflow</div>
+    <ul style="margin:6px 0 0 16px;padding:0;color:var(--text-2)">
+      <li>Add features by address, coordinate, MGRS/UTM, drawing, OSINT feeds, or your backend.</li>
+      <li>Right-click the map for quick actions & coordinate copy.</li>
+      <li>Select features (list checkboxes / click), then export or push to backend.</li>
+      <li>Configure your REST/GeoJSON backend under the <b>Backend</b> panel.</li>
+    </ul>
+    </div>`,`<button class="btn primary" onclick="document.getElementById('modalOverlay').classList.remove('open')">Got it</button>`);
+}
+
+/* =================================================================
+   COMMAND PALETTE
+   ================================================================= */
+const COMMANDS=[
+  {t:'Add point by coordinate',c:'Add',i:'◎',run:()=>{showPanel('add');$('#coordInput').focus();}},
+  {t:'Add point by address',c:'Add',i:'📍',run:()=>{showPanel('add');$('#addrInput').focus();}},
+  {t:'Draw polygon',c:'Draw',i:'⬠',run:()=>setTool('polygon')},
+  {t:'Draw line',c:'Draw',i:'╱',run:()=>setTool('polyline')},
+  {t:'Measure distance',c:'Draw',i:'📏',run:()=>setTool('measure')},
+  {t:'Measure area',c:'Draw',i:'📐',run:()=>setTool('measureArea')},
+  {t:'Load USGS earthquakes',c:'OSINT',i:'🌐',run:()=>{showPanel('osint');osintUSGS();}},
+  {t:'Load NWS weather alerts',c:'OSINT',i:'⚠️',run:()=>{showPanel('osint');osintNWS();}},
+  {t:'Query OSM Overpass (view)',c:'OSINT',i:'🏢',run:()=>{showPanel('osint');osintOverpass();}},
+  {t:'Load Wikipedia nearby',c:'OSINT',i:'📚',run:()=>{showPanel('osint');osintWiki();}},
+  {t:'Test backend link',c:'Backend',i:'🔌',run:()=>{showPanel('connect');beTest();}},
+  {t:'Load records from backend',c:'Backend',i:'⬇',run:beLoad},
+  {t:'Push selection to backend',c:'Backend',i:'⬆',run:()=>{$('#expScope').value='selected';$('#bePush').click();}},
+  {t:'Build & copy GeoJSON (selected)',c:'Export',i:'⧉',run:()=>{$('#expScope').value='selected';$('#expBuild').click();$('#expCopy').click();}},
+  {t:'Export project file',c:'Export',i:'💾',run:()=>$('#prjExport').click()},
+  {t:'Import GeoJSON file',c:'Export',i:'📂',run:()=>$('#importGeojsonBtn').click()},
+  {t:'Fit all features',c:'View',i:'⛶',run:fitAll},
+  {t:'Toggle graticule',c:'View',i:'#',run:()=>toggleSetting('graticule')},
+  {t:'Toggle clustering',c:'View',i:'◈',run:()=>toggleSetting('cluster')},
+  {t:'Clear selection',c:'Edit',i:'✕',run:clearSelection},
+  {t:'Select all shown',c:'Edit',i:'✓',run:selectAllShown},
+  {t:'Delete selected',c:'Edit',i:'🗑',run:deleteSelected},
+  {t:'Clear all features',c:'Edit',i:'⌫',run:()=>$('#clearAll').click()},
+  {t:'Basemap: Tactical Dark',c:'Basemap',i:'▦',run:()=>setBasemap('dark')},
+  {t:'Basemap: Satellite',c:'Basemap',i:'🛰',run:()=>setBasemap('sat')},
+  {t:'Basemap: Streets',c:'Basemap',i:'🗺',run:()=>setBasemap('streets')},
+  {t:'Basemap: Terrain',c:'Basemap',i:'⛰',run:()=>setBasemap('terrain')},
+  {t:'Load demo scenario data',c:'Help',i:'✦',run:loadDemo},
+  {t:'Help & shortcuts',c:'Help',i:'?',run:showHelp}
+];
+let cmdActive=0, cmdFiltered=COMMANDS.slice();
+function openCmd(){ $('#cmdOverlay').classList.add('open'); $('#cmdInput').value=''; cmdFiltered=COMMANDS.slice(); cmdActive=0; renderCmd(); $('#cmdInput').focus(); }
+function closeCmd(){ $('#cmdOverlay').classList.remove('open'); }
+function renderCmd(){
+  $('#cmdList').innerHTML=cmdFiltered.map((c,i)=>`<div class="cmd ${i===cmdActive?'active':''}" data-i="${i}"><span class="ci">${c.i}</span><span class="ct">${esc(c.t)}</span><span class="cat">${c.c}</span></div>`).join('')||'<div class="cmd"><span class="ct" style="color:var(--muted)">No commands</span></div>';
+}
+$('#cmdInput').addEventListener('input',e=>{
+  const q=e.target.value.toLowerCase();
+  cmdFiltered=COMMANDS.filter(c=>(c.t+' '+c.c).toLowerCase().includes(q));
+  cmdActive=0; renderCmd();
+});
+$('#cmdInput').addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'){cmdActive=clamp(cmdActive+1,0,cmdFiltered.length-1);renderCmd();e.preventDefault();}
+  else if(e.key==='ArrowUp'){cmdActive=clamp(cmdActive-1,0,cmdFiltered.length-1);renderCmd();e.preventDefault();}
+  else if(e.key==='Enter'){ const c=cmdFiltered[cmdActive]; if(c){closeCmd();c.run();} }
+  else if(e.key==='Escape'){ closeCmd(); }
+});
+$('#cmdList').addEventListener('click',e=>{ const el=e.target.closest('.cmd'); if(!el||el.dataset.i==null)return; const c=cmdFiltered[+el.dataset.i]; closeCmd(); c.run(); });
+$('#cmdOverlay').addEventListener('click',e=>{ if(e.target.id==='cmdOverlay') closeCmd(); });
+$('#btnCmd').addEventListener('click',openCmd);
+
+/* =================================================================
+   TOASTS / CLIPBOARD / DOWNLOAD
+   ================================================================= */
+function toast(title,msg,kind='info'){
+  const el=document.createElement('div');
+  el.className='toast '+kind;
+  el.innerHTML=`<div><div class="tt">${esc(title)}</div>${msg?`<div class="tm">${esc(msg)}</div>`:''}</div>`;
+  $('#toasts').appendChild(el);
+  setTimeout(()=>{ el.style.transition='.3s'; el.style.opacity='0'; el.style.transform='translateX(30px)'; setTimeout(()=>el.remove(),300); },kind==='err'?5200:3200);
+}
+function copyText(t){ if(navigator.clipboard) navigator.clipboard.writeText(t).catch(()=>fallbackCopy(t)); else fallbackCopy(t); }
+function fallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} ta.remove(); }
+function download(name,text){ const b=new Blob([text],{type:'application/json'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(u),1000); }
+
+/* =================================================================
+   SETTINGS / TOGGLES BINDING
+   ================================================================= */
+function applyAccent(){ const [a,d]=ACCENTS[settings.accent]||ACCENTS.teal; const root=document.documentElement.style;
+  root.setProperty('--accent',a); root.setProperty('--accent-dim',d); root.setProperty('--accent-glow',hexA(a,.35)); }
+function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
+function toggleSetting(key){ settings[key]=!settings[key]; onToggle(key); syncSettingsToUI(); }
+function onToggle(key){
+  saveSettings();
+  if(key==='graticule') drawGraticule();
+  else if(key==='labels') setLabels(settings.labels);
+  else if(key==='cluster') rebuildMarkerGroup();
+  else if(key==='featLabels'){ state.features.forEach(f=>{ if(f.layer) bindLabel(f,f.layer); }); }
+}
+$$('.toggle').forEach(t=>{
+  const key=t.dataset.toggle;
+  t.classList.toggle('on',!!settings[key]);
+  t.addEventListener('click',()=>{ settings[key]=!settings[key]; t.classList.toggle('on',settings[key]); onToggle(key); });
+});
+function syncSettingsToUI(){
+  $$('.toggle').forEach(t=>t.classList.toggle('on',!!settings[t.dataset.toggle]));
+  $('#coordFmt').value=settings.coordFmt; $('#coordPrec').value=settings.precision;
+  $('#unitSel').value=settings.units; $('#colorBySel').value=settings.colorBy; $('#defCat').value=settings.defCat;
+  // backend fields
+  const c=state.backend.cfg;
+  $('#beBase').value=c.base||''; $('#beFetch').value=c.fetch||''; $('#beCreate').value=c.create||'';
+  $('#beUpdate').value=c.update||''; $('#beAuthName').value=c.authName||''; $('#beAuthVal').value=c.authVal||'';
+  $('#beIdField').value=c.idField||'id'; $('#beArrPath').value=c.arrPath||'';
+  applyAccent();
+}
+$('#coordFmt').addEventListener('change',e=>{settings.coordFmt=e.target.value;saveSettings();});
+$('#coordPrec').addEventListener('change',e=>{settings.precision=+e.target.value;saveSettings();});
+$('#unitSel').addEventListener('change',e=>{settings.units=e.target.value;saveSettings();renderAll();updateScaleReadout();});
+$('#colorBySel').addEventListener('change',e=>{settings.colorBy=e.target.value;saveSettings();state.features.forEach(refreshFeatureLayer);renderAll();});
+$('#defCat').addEventListener('change',e=>{settings.defCat=e.target.value;saveSettings();});
+
+/* accent buttons */
+$('#accentRow').innerHTML=Object.keys(ACCENTS).map(k=>`<button class="btn sm" data-accent="${k}" title="${k}" style="flex:0 0 auto;width:34px;padding:0"><span style="width:14px;height:14px;border-radius:50%;background:${ACCENTS[k][0]};display:inline-block"></span></button>`).join('');
+$('#accentRow').addEventListener('click',e=>{ const b=e.target.closest('[data-accent]'); if(!b)return; settings.accent=b.dataset.accent; applyAccent(); saveSettings(); state.features.forEach(refreshFeatureLayer); });
+
+/* default category select population */
+$('#defCat').innerHTML=Object.keys(CATEGORY_COLORS).map(k=>`<option ${k===settings.defCat?'selected':''}>${k}</option>`).join('');
+
+/* basemap grid */
+$('#basemapGrid').innerHTML=Object.entries(BASEMAPS).map(([id,b])=>`
+  <div class="bm ${id===settings.basemap?'active':''}" data-bm="${id}">
+    <div class="thumb" style="background-image:url('${b.thumb}')"></div><div class="nm">${b.name}</div>
+  </div>`).join('');
+$('#basemapGrid').addEventListener('click',e=>{ const el=e.target.closest('.bm'); if(!el)return; setBasemap(el.dataset.bm); });
+
+/* scenarios */
+$('#scenList').innerHTML=SCENARIOS.map(s=>`<div class="scen" data-scen="${s.id}"><div class="sci">${s.icon}</div><div><div class="scn">${s.name}</div><div class="scd">${s.desc}</div></div></div>`).join('');
+$('#scenList').addEventListener('click',e=>{ const el=e.target.closest('.scen'); if(!el)return; applyScenario(el.dataset.scen); });
+function applyScenario(id){
+  const s=SCENARIOS.find(x=>x.id===id); if(!s) return;
+  settings.defCat=s.cats[0]; $('#defCat').value=s.cats[0]; saveSettings();
+  toast('Scenario set',s.name+' — default category: '+s.cats[0],'ok');
+}
+
+/* =================================================================
+   ACTIONS: fit, delete, locate, fullscreen, zoom
+   ================================================================= */
+function fitAll(){
+  const layers=[];
+  state.features.forEach(f=>{ if(f.layer&&isVisible(f)) layers.push(f.layer); });
+  if(!layers.length){ toast('Nothing to fit','','warn'); return; }
+  const grp=L.featureGroup(layers);
+  try{ map.fitBounds(grp.getBounds().pad(.15)); }catch(e){}
+}
+function deleteSelected(){
+  if(!state.selection.size){ toast('No selection','','warn'); return; }
+  if(!confirm(`Delete ${state.selection.size} selected feature(s)?`)) return;
+  [...state.selection].forEach(id=>{ const f=state.features.get(id); if(f&&f.layer) groupFor(f).removeLayer(f.layer); state.features.delete(id); });
+  state.selection.clear(); closeDetails(); renderAll(); scheduleSave(); toast('Deleted','','ok');
+}
+$('#btnFit').addEventListener('click',fitAll);
+$('#selAllBtn').addEventListener('click',selectAllShown);
+$('#selNoneBtn').addEventListener('click',clearSelection);
+$('#btnLocate').addEventListener('click',()=>{
+  toast('Locating…','Requesting device position','info');
+  map.locate({setView:true,maxZoom:15,enableHighAccuracy:true});
+});
+map.on('locationfound',e=>{
+  if(locateLayer) map.removeLayer(locateLayer);
+  locateLayer=L.layerGroup([
+    L.circle(e.latlng,{radius:e.accuracy,color:ACCENTS[settings.accent][0],weight:1,fillOpacity:.08}),
+    L.circleMarker(e.latlng,{radius:6,color:'#fff',fillColor:ACCENTS[settings.accent][0],fillOpacity:1,weight:2})
+  ]).addTo(map);
+  toast('Position acquired',fmtLatLng(e.latlng.lat,e.latlng.lng),'ok');
+});
+map.on('locationerror',e=>toast('Location failed',e.message,'err'));
+$('#btnFull').addEventListener('click',()=>{ const el=$('#mapwrap'); if(!document.fullscreenElement) el.requestFullscreen&&el.requestFullscreen(); else document.exitFullscreen(); });
+$('#zoomIn').addEventListener('click',()=>map.zoomIn());
+$('#zoomOut').addEventListener('click',()=>map.zoomOut());
+
+/* =================================================================
+   KEYBOARD SHORTCUTS
+   ================================================================= */
+document.addEventListener('keydown',e=>{
+  const typing=/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); openCmd(); return; }
+  if(e.key==='Escape'){ setTool('pan'); closeCmd(); closeModal(); ctx.style.display='none'; sResults.classList.remove('open'); return; }
+  if(typing) return;
+  const k=e.key.toLowerCase();
+  if(k==='/'){ e.preventDefault(); gSearch.focus(); }
+  else if(k==='m') setTool('marker');
+  else if(k==='l') setTool('polyline');
+  else if(k==='p') setTool('polygon');
+  else if(k==='r') setTool('rectangle');
+  else if(k==='c') setTool('circle');
+  else if(k==='d') setTool('measure');
+  else if(k==='a'&&!e.ctrlKey&&!e.metaKey) setTool('measureArea');
+  else if(k==='f') fitAll();
+  else if(k==='g') toggleSetting('graticule');
+  else if(k==='\\') $('#panel').classList.toggle('collapsed');
+  else if(e.key==='Delete'||e.key==='Backspace'){ if(state.selection.size) deleteSelected(); }
+});
+
+/* =================================================================
+   CLOCK
+   ================================================================= */
+setInterval(()=>{ const d=new Date(); $('#clock').textContent=d.toISOString().slice(11,19)+'Z'; },1000);
+
+/* =================================================================
+   DEMO DATA
+   ================================================================= */
+function loadDemo(){
+  const base=[38.8951,-77.0364];
+  const demo=[
+    {type:'point',category:'Incident',name:'Structure fire — Blk 400',geometry:{type:'Point',coordinates:[-77.036,38.897]},props:{status:'active',units:'E1,L2'}},
+    {type:'point',category:'Unit',name:'Medic 7',geometry:{type:'Point',coordinates:[-77.030,38.900]},props:{callsign:'M7',status:'enroute'}},
+    {type:'point',category:'Facility',name:'Field Hospital Alpha',geometry:{type:'Point',coordinates:[-77.045,38.889]},props:{beds:120}},
+    {type:'circle',category:'Hazard',name:'Evacuation radius',radius:900,geometry:{type:'Point',coordinates:[-77.036,38.897]},props:{reason:'chemical'}},
+    {type:'polygon',category:'Boundary',name:'Sector 1 AO',geometry:{type:'Polygon',coordinates:[[[-77.055,38.905],[-77.020,38.905],[-77.018,38.885],[-77.058,38.884],[-77.055,38.905]]]}},
+    {type:'line',category:'Objective',name:'Primary egress route',geometry:{type:'LineString',coordinates:[[-77.036,38.897],[-77.030,38.900],[-77.020,38.903]]}}
+  ];
+  demo.forEach(d=>createFeature(Object.assign({source:'manual'},d)));
+  map.setView(base,14); renderAll();
+  toast('Demo loaded',`${demo.length} EOC features`,'ok');
+}
+
+/* =================================================================
+   INIT
+   ================================================================= */
+function init(){
+  setBasemap(settings.basemap||'dark');
+  setLabels(settings.labels);
+  applyAccent();
+  syncSettingsToUI();
+  drawGraticule(); updateScaleReadout();
+  if(typeof mgrs==='undefined'){ toast('MGRS library offline','Using UTM fallback for grid refs.','warn'); }
+  // restore last project if present
+  const saved=loadJSON(PROJECT_KEY,null);
+  if(saved && saved.features && saved.features.length){ loadProject(saved); toast('Workspace restored',`${saved.features.length} feature(s) from local storage`,'info'); }
+  else { renderAll(); }
+  showPanel('data');
+  setBackendStatus(false);
+  // first-run hint
+  if(!localStorage.getItem('atlas.seen')){ localStorage.setItem('atlas.seen','1'); setTimeout(()=>toast('Welcome to ATLAS','Press Ctrl/⌘+K for commands, or ? for help. Try "Load demo scenario data".','info'),700); }
+}
+init();
+window.ATLAS={state,settings,map,createFeature,exportCollection,loadDemo}; // debug handle
+</script>
+</body>
+</html>
